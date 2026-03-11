@@ -32,6 +32,21 @@
         "createdAt": { "type": "number" }
       },
       "required": ["gameId", "authorName", "text", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for the admin",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["new_comment"] },
+        "message": { "type": "string" },
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "authorName": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["type", "message", "read", "createdAt"]
     }
   },
   "firestore": {
@@ -42,6 +57,10 @@
     "comments/{commentId}": {
       "schema": { "$ref": "#/entities/Comment" },
       "description": "Stores all comments for games"
+    },
+    "notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Stores notifications for admin"
     }
   }
 }

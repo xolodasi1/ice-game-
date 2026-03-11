@@ -1,10 +1,12 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, getDocs, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users, MessageSquare } from 'lucide-react';
+import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users, MessageSquare, ThumbsUp, TrendingUp, Bell, BellRing, Check, Trash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface AdminViewProps {
   user: User;
@@ -48,6 +50,17 @@ interface Comment {
   likedBy?: string[];
 }
 
+interface Notification {
+  id: string;
+  type: 'new_comment';
+  message: string;
+  gameId?: string;
+  gameTitle?: string;
+  authorName?: string;
+  read: boolean;
+  createdAt: number;
+}
+
 export default function AdminView({ user }: AdminViewProps) {
   const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
@@ -55,7 +68,7 @@ export default function AdminView({ user }: AdminViewProps) {
   const [editingGame, setEditingGame] = useState<Partial<Game> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'games' | 'settings' | 'admins' | 'comments'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'settings' | 'admins' | 'comments' | 'stats'>('games');
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [settings, setSettings] = useState<SiteSettings>({
@@ -73,6 +86,30 @@ export default function AdminView({ user }: AdminViewProps) {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentSort, setCommentSort] = useState<'newest' | 'popular'>('newest');
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [toast, setToast] = useState<Notification | null>(null);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const sortedComments = [...comments].sort((a, b) => {
+    if (commentSort === 'popular') {
+      const aLikes = (a.likedBy || []).length;
+      const bLikes = (b.likedBy || []).length;
+      if (aLikes !== bLikes) {
+        return bLikes - aLikes;
+      }
+    }
+    return b.createdAt - a.createdAt;
+  });
 
   useEffect(() => {
     const q = query(collection(db, 'games'), orderBy('createdAt', 'desc'));
@@ -119,13 +156,54 @@ export default function AdminView({ user }: AdminViewProps) {
       setComments(commentsData);
     });
 
+    const qNotifications = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+      const notificationsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      
+      // Check for new unread notifications to show toast
+      const prevUnreadIds = notifications.filter(n => !n.read).map(n => n.id);
+      const newUnread = notificationsData.find(n => !n.read && !prevUnreadIds.includes(n.id));
+      
+      if (newUnread && !loading) {
+        setToast(newUnread);
+      }
+      
+      setNotifications(notificationsData);
+    });
+
     return () => {
       unsubscribeGames();
       unsubscribeSettings();
       unsubscribeComments();
+      unsubscribeNotifications();
     };
   }, []);
 
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', id), { read: true });
+    } catch (err) {
+      console.error("Failed to mark notification as read", err);
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    try {
+      const unread = notifications.filter(n => !n.read);
+      await Promise.all(unread.map(n => updateDoc(doc(db, 'notifications', n.id), { read: true })));
+    } catch (err) {
+      console.error("Failed to clear notifications", err);
+    }
+  };
+
+  const handleDeleteNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, 'notifications', id));
+    } catch (err) {
+      console.error("Failed to delete notification", err);
+    }
+  };
   const handleAddAdmin = async () => {
     if (!newAdminEmail || !newAdminEmail.includes('@')) {
       setMessage({ type: 'error', text: 'Введите корректный email' });
@@ -409,6 +487,130 @@ export default function AdminView({ user }: AdminViewProps) {
             <span className="hidden sm:inline md:inline">Комментарии</span>
             <span className="sm:hidden">Комменты</span>
           </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+              activeTab === 'stats' 
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span className="hidden sm:inline md:inline">Топы и Статистика</span>
+            <span className="sm:hidden">Топы</span>
+          </button>
+          
+          <div className="relative md:w-full">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className={`w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-all relative group ${
+                showNotifications 
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_20px_rgba(6,182,212,0.3)]' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+              }`}
+            >
+              <div className="relative">
+                {unreadCount > 0 ? <BellRing className={`w-5 h-5 ${showNotifications ? '' : 'animate-bounce'}`} /> : <Bell className="w-5 h-5" />}
+                {unreadCount > 0 && !showNotifications && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-950"></span>
+                )}
+              </div>
+              <span className="hidden sm:inline md:inline font-bold">Уведомления</span>
+              <span className="sm:hidden font-bold">Увед.</span>
+              {unreadCount > 0 && (
+                <span className={`ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${showNotifications ? 'bg-slate-950 text-cyan-400' : 'bg-red-500 text-white'}`}>
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showNotifications && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute bottom-full left-0 md:left-full md:bottom-0 md:ml-4 mb-4 md:mb-0 w-80 sm:w-96 bg-slate-900/90 border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden backdrop-blur-2xl"
+                >
+                  <div className="p-5 border-b border-white/5 flex items-center justify-between bg-slate-950/40">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-cyan-400" />
+                      <h3 className="font-black text-white text-sm uppercase tracking-widest">Центр уведомлений</h3>
+                    </div>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={handleClearNotifications}
+                        className="text-[10px] text-cyan-400 hover:text-cyan-300 font-black uppercase tracking-widest bg-cyan-500/10 px-2 py-1 rounded-lg transition-colors"
+                      >
+                        Прочитать все
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                    {notifications.length === 0 ? (
+                      <div className="p-12 text-center">
+                        <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
+                          <Bell className="w-8 h-8 text-slate-600" />
+                        </div>
+                        <p className="text-slate-500 text-sm font-medium">У вас пока нет уведомлений</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/5">
+                        {notifications.map(n => (
+                          <motion.div 
+                            layout
+                            key={n.id} 
+                            onClick={() => {
+                              handleMarkAsRead(n.id);
+                              setActiveTab('comments');
+                              setShowNotifications(false);
+                            }}
+                            className={`p-5 cursor-pointer transition-all hover:bg-white/5 group relative ${!n.read ? 'bg-cyan-500/[0.03]' : ''}`}
+                          >
+                            <div className="flex gap-4">
+                              <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center border transition-all ${
+                                !n.read 
+                                  ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]' 
+                                  : 'bg-slate-800 border-white/5 text-slate-500'
+                              }`}>
+                                <MessageSquare className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start mb-1">
+                                  <p className={`text-sm leading-snug ${!n.read ? 'text-white font-bold' : 'text-slate-400 font-medium'}`}>
+                                    {n.message}
+                                  </p>
+                                  <button 
+                                    onClick={(e) => handleDeleteNotification(e, n.id)}
+                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-600 hover:text-red-400 transition-all"
+                                  >
+                                    <Trash className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                    {new Date(n.createdAt).toLocaleDateString()} • {new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  </span>
+                                  {!n.read && (
+                                    <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {notifications.length > 0 && (
+                    <div className="p-3 bg-slate-950/30 border-t border-white/5 text-center">
+                      <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Всего уведомлений: {notifications.length}</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </nav>
 
         <div className="hidden md:block p-4 border-t border-cyan-500/10 mt-auto">
@@ -424,6 +626,49 @@ export default function AdminView({ user }: AdminViewProps) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative w-full">
+        <AnimatePresence>
+          {toast && (
+            <motion.div 
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 100, scale: 0.9 }}
+              className="fixed top-6 right-6 z-[100] w-80 bg-slate-900 border border-cyan-500/30 rounded-2xl shadow-[0_10px_40px_rgba(6,182,212,0.2)] p-4 backdrop-blur-xl overflow-hidden group"
+            >
+              <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+              <div className="flex gap-4">
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0">
+                  <BellRing className="w-5 h-5 animate-pulse" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start mb-1">
+                    <h4 className="text-xs font-black text-cyan-400 uppercase tracking-widest">Новое уведомление</h4>
+                    <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-white font-bold leading-snug mb-2">{toast.message}</p>
+                  <button 
+                    onClick={() => {
+                      handleMarkAsRead(toast.id);
+                      setActiveTab('comments');
+                      setToast(null);
+                    }}
+                    className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline"
+                  >
+                    Посмотреть
+                  </button>
+                </div>
+              </div>
+              <motion.div 
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 5, ease: "linear" }}
+                className="absolute bottom-0 left-0 h-0.5 bg-cyan-500/30"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="max-w-5xl mx-auto">
           
           {message && (
@@ -686,15 +931,25 @@ export default function AdminView({ user }: AdminViewProps) {
                   <h1 className="text-3xl font-bold text-white mb-2">Комментарии</h1>
                   <p className="text-slate-400">Модерация комментариев пользователей.</p>
                 </div>
+                {comments.length > 0 && (
+                  <select
+                    value={commentSort}
+                    onChange={(e) => setCommentSort(e.target.value as 'newest' | 'popular')}
+                    className="bg-slate-900 border border-white/10 text-slate-300 text-sm font-medium rounded-xl px-4 py-2.5 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all cursor-pointer"
+                  >
+                    <option value="newest">Сначала новые</option>
+                    <option value="popular">Сначала популярные</option>
+                  </select>
+                )}
               </div>
 
               <div className="space-y-4">
-                {comments.length === 0 ? (
+                {sortedComments.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
                     Комментариев пока нет.
                   </div>
                 ) : (
-                  comments.map(comment => {
+                  sortedComments.map(comment => {
                     const game = games.find(g => g.id === comment.gameId);
                     return (
                       <div key={comment.id} className="bg-slate-900 border border-cyan-500/10 rounded-2xl p-6 flex flex-col sm:flex-row gap-4 justify-between items-start">
@@ -704,6 +959,11 @@ export default function AdminView({ user }: AdminViewProps) {
                             <span className="text-xs text-slate-500">
                               {new Date(comment.createdAt).toLocaleDateString()} в {new Date(comment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </span>
+                            {(comment.likedBy || []).length > 0 && (
+                              <span className="text-xs font-medium text-cyan-500 bg-cyan-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <ThumbsUp className="w-3 h-3" /> {(comment.likedBy || []).length}
+                              </span>
+                            )}
                           </div>
                           <p className="text-slate-300 whitespace-pre-wrap leading-relaxed mb-3">
                             {comment.text}
@@ -725,6 +985,132 @@ export default function AdminView({ user }: AdminViewProps) {
                     );
                   })
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'stats' && (
+            <div className="space-y-12 pb-20">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Топы и Статистика</h1>
+                <p className="text-slate-400">Рейтинг ваших игр по популярности и вовлеченности.</p>
+              </div>
+
+              {/* Table Section */}
+              <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl overflow-hidden">
+                <div className="p-6 border-b border-white/5">
+                  <h2 className="text-xl font-bold text-white">Таблица лидеров</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-950/50">
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Игра</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Просмотры</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Скачивания</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Лайки</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Конверсия (DL/View)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {[...games].sort((a, b) => b.views - a.views).map((game) => (
+                        <tr key={game.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-white">{game.title}</div>
+                            <div className="text-xs text-slate-500">v{game.version}</div>
+                          </td>
+                          <td className="px-6 py-4 text-cyan-400 font-mono">{game.views.toLocaleString()}</td>
+                          <td className="px-6 py-4 text-emerald-400 font-mono">{game.downloads.toLocaleString()}</td>
+                          <td className="px-6 py-4 text-pink-400 font-mono">{(game.likedBy || []).length}</td>
+                          <td className="px-6 py-4">
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
+                              <div 
+                                className="bg-cyan-500 h-full" 
+                                style={{ width: `${Math.min(100, (game.downloads / (game.views || 1)) * 100)}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {((game.downloads / (game.views || 1)) * 100).toFixed(1)}%
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-cyan-400" /> Топ по просмотрам
+                  </h3>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[...games].sort((a, b) => b.views - a.views).slice(0, 5)}
+                        layout="vertical"
+                        margin={{ left: 40, right: 40 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                        <XAxis type="number" hide />
+                        <YAxis 
+                          dataKey="title" 
+                          type="category" 
+                          stroke="#94a3b8" 
+                          fontSize={12} 
+                          width={80}
+                        />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(6, 182, 212, 0.2)', borderRadius: '12px' }}
+                          itemStyle={{ color: '#22d3ee' }}
+                        />
+                        <Bar dataKey="views" fill="#06b6d4" radius={[0, 4, 4, 0]} barSize={20}>
+                          {games.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={`rgba(6, 182, 212, ${1 - index * 0.15})`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                    <Download className="w-5 h-5 text-emerald-400" /> Топ по скачиваниям
+                  </h3>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[...games].sort((a, b) => b.downloads - a.downloads).slice(0, 5)}
+                        layout="vertical"
+                        margin={{ left: 40, right: 40 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                        <XAxis type="number" hide />
+                        <YAxis 
+                          dataKey="title" 
+                          type="category" 
+                          stroke="#94a3b8" 
+                          fontSize={12} 
+                          width={80}
+                        />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px' }}
+                          itemStyle={{ color: '#10b981' }}
+                        />
+                        <Bar dataKey="downloads" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20}>
+                          {games.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={`rgba(16, 185, 129, ${1 - index * 0.15})`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             </div>
           )}

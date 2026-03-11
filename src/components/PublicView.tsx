@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { collection, doc, getDocs, updateDoc, increment, query, orderBy, addDoc, onSnapshot, where } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { collection, doc, getDocs, updateDoc, increment, query, orderBy, addDoc, onSnapshot, where, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor, MessageSquare, Send, ThumbsUp, ThumbsDown, LogIn, LogOut } from 'lucide-react';
@@ -169,6 +169,18 @@ export default function PublicView() {
         text: newCommentText.trim(),
         createdAt: Date.now()
       });
+
+      // Create notification for admin
+      await addDoc(collection(db, 'notifications'), {
+        type: 'new_comment',
+        message: `Новый комментарий от ${newCommentName.trim()} к игре "${selectedGame.title}"`,
+        gameId: selectedGame.id,
+        gameTitle: selectedGame.title,
+        authorName: newCommentName.trim(),
+        read: false,
+        createdAt: Date.now()
+      });
+
       setNewCommentText('');
     } catch (err) {
       console.error("Failed to add comment", err);

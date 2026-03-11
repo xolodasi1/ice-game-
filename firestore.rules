@@ -84,6 +84,17 @@ service cloud.firestore {
              (!('likedBy' in data) || data.likedBy is list);
     }
 
+    function isValidNotification(data) {
+      return hasRequiredFields(['type', 'message', 'read', 'createdAt']) &&
+             data.type in ['new_comment'] &&
+             data.message is string && data.message.size() > 0 &&
+             data.read is bool &&
+             data.createdAt is number &&
+             (!('gameId' in data) || data.gameId is string) &&
+             (!('gameTitle' in data) || data.gameTitle is string) &&
+             (!('authorName' in data) || data.authorName is string);
+    }
+
     function isOnlyIncrementingCommentStats() {
       let diff = request.resource.data.diff(resource.data);
       let allowedKeys = diff.affectedKeys().hasOnly(['likedBy']);
@@ -128,6 +139,13 @@ service cloud.firestore {
     match /settings/{document} {
       allow read: if true;
       allow write: if isAdmin() && isValidSettings(request.resource.data);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Keep legacy rules for backward compatibility during transition
