@@ -16,25 +16,51 @@ interface Game {
   downloads: number;
   createdAt: number;
   platform: 'pc' | 'android' | 'both';
+  logoUrl?: string;
+  previewUrl?: string;
+}
+
+interface SiteSettings {
+  siteName: string;
+  siteDescription: string;
+  siteAvatar: string;
+  vkUrl: string;
+  telegramUrl: string;
+  youtubeUrl: string;
 }
 
 export default function PublicView() {
   const [games, setGames] = useState<Game[]>([]);
+  const [settings, setSettings] = useState<SiteSettings>({
+    siteName: 'ice_game',
+    siteDescription: 'Каталог инди-игр и проектов',
+    siteAvatar: '',
+    vkUrl: '',
+    telegramUrl: '',
+    youtubeUrl: ''
+  });
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pc' | 'android'>('all');
 
   useEffect(() => {
-    const fetchGames = async () => {
+    const fetchData = async () => {
       try {
         const q = query(collection(db, 'games'), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
         const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
         setGames(gamesData);
+
+        const settingsDoc = await getDocs(query(collection(db, 'settings')));
+        settingsDoc.forEach(doc => {
+          if (doc.id === 'general') {
+            setSettings(prev => ({ ...prev, ...doc.data() }));
+          }
+        });
       } catch (err: any) {
-        console.error("Error fetching games:", err);
-        setError("Не удалось загрузить список игр.");
+        console.error("Error fetching data:", err);
+        setError("Не удалось загрузить данные.");
         if (err.code === 'permission-denied') {
           handleFirestoreError(err, OperationType.LIST, 'games');
         }
@@ -43,7 +69,7 @@ export default function PublicView() {
       }
     };
 
-    fetchGames();
+    fetchData();
   }, []);
 
   const handleViewGame = async (game: Game) => {
@@ -81,9 +107,13 @@ export default function PublicView() {
       {/* Navigation */}
       <nav className="border-b border-cyan-500/10 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-white">
-            <Snowflake className="w-6 h-6 text-cyan-400" />
-            ice_game
+          <div className="flex items-center gap-3 font-bold text-xl tracking-tight text-white">
+            {settings.siteAvatar ? (
+              <img src={settings.siteAvatar} alt="Logo" className="w-8 h-8 rounded-lg object-cover" />
+            ) : (
+              <Snowflake className="w-6 h-6 text-cyan-400" />
+            )}
+            {settings.siteName}
           </div>
           <Link to="/admin" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">
             Панель автора
@@ -130,9 +160,14 @@ export default function PublicView() {
                   )}
                 </div>
                 
-                <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
-                  {selectedGame.title}
-                </h1>
+                <div className="flex items-center gap-6">
+                  {selectedGame.logoUrl && (
+                    <img src={selectedGame.logoUrl} alt="Game Logo" className="w-24 h-24 rounded-3xl object-cover shadow-xl shadow-cyan-900/20 border border-white/10" />
+                  )}
+                  <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
+                    {selectedGame.title}
+                  </h1>
+                </div>
                 
                 <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
                   {selectedGame.description}
@@ -150,8 +185,14 @@ export default function PublicView() {
               </div>
 
               <div className="relative aspect-square md:aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 border border-cyan-500/10 shadow-2xl flex items-center justify-center group">
-                <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/ice_game/800/600')] bg-cover bg-center opacity-30 group-hover:opacity-40 transition-opacity duration-500 mix-blend-overlay"></div>
-                <Gamepad2 className="w-32 h-32 text-cyan-500/20 relative z-10" />
+                {selectedGame.previewUrl ? (
+                  <img src={selectedGame.previewUrl} alt="Game Preview" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/ice_game/800/600')] bg-cover bg-center opacity-30 group-hover:opacity-40 transition-opacity duration-500 mix-blend-overlay"></div>
+                    <Gamepad2 className="w-32 h-32 text-cyan-500/20 relative z-10" />
+                  </>
+                )}
               </div>
             </div>
 
@@ -176,8 +217,8 @@ export default function PublicView() {
           <div className="animate-in fade-in duration-500">
             <div className="mb-12 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div>
-                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Каталог игр</h1>
-                <p className="text-slate-400 text-lg">Все проекты от студии ice_game в одном месте.</p>
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{settings.siteName}</h1>
+                <p className="text-slate-400 text-lg whitespace-pre-wrap">{settings.siteDescription}</p>
               </div>
               
               <div className="flex bg-slate-900 border border-cyan-500/20 rounded-xl p-1 self-center md:self-auto">
@@ -210,8 +251,14 @@ export default function PublicView() {
                   className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 cursor-pointer group hover:border-cyan-500/30 transition-all hover:-translate-y-1 shadow-lg hover:shadow-cyan-900/20 flex flex-col"
                 >
                   <div className="aspect-video bg-slate-950 rounded-2xl mb-6 flex items-center justify-center border border-white/5 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/ice_game/400/225')] bg-cover bg-center opacity-20 group-hover:opacity-30 transition-opacity mix-blend-overlay"></div>
-                    <Gamepad2 className="w-12 h-12 text-cyan-500/30 relative z-10 group-hover:scale-110 transition-transform" />
+                    {game.previewUrl ? (
+                      <img src={game.previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/ice_game/400/225')] bg-cover bg-center opacity-20 group-hover:opacity-30 transition-opacity mix-blend-overlay"></div>
+                        <Gamepad2 className="w-12 h-12 text-cyan-500/30 relative z-10 group-hover:scale-110 transition-transform" />
+                      </>
+                    )}
                     <div className="absolute top-3 right-3 flex gap-1 z-20">
                       {(game.platform === 'pc' || game.platform === 'both') && (
                         <div className="bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-md border border-white/10 text-cyan-400">
@@ -226,7 +273,13 @@ export default function PublicView() {
                     </div>
                   </div>
                   
-                  <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">{game.title}</h3>
+                  <div className="flex items-center gap-4 mb-2">
+                    {game.logoUrl && (
+                      <img src={game.logoUrl} alt="Logo" className="w-10 h-10 rounded-xl object-cover border border-white/10" />
+                    )}
+                    <h3 className="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors">{game.title}</h3>
+                  </div>
+                  
                   <p className="text-slate-400 text-sm line-clamp-2 mb-6 flex-1">
                     {game.description}
                   </p>
@@ -256,7 +309,24 @@ export default function PublicView() {
 
       {/* Footer */}
       <footer className="border-t border-cyan-500/10 mt-20 py-10 text-center text-slate-500 text-sm">
-        <p>© {new Date().getFullYear()} ice_game. Все права защищены.</p>
+        <div className="flex justify-center gap-6 mb-6">
+          {settings.vkUrl && (
+            <a href={settings.vkUrl} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">
+              ВКонтакте
+            </a>
+          )}
+          {settings.telegramUrl && (
+            <a href={settings.telegramUrl} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">
+              Telegram
+            </a>
+          )}
+          {settings.youtubeUrl && (
+            <a href={settings.youtubeUrl} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">
+              YouTube
+            </a>
+          )}
+        </div>
+        <p>© {new Date().getFullYear()} {settings.siteName}. Все права защищены.</p>
       </footer>
     </div>
   );

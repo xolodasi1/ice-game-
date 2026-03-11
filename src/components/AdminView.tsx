@@ -23,6 +23,17 @@ interface Game {
   createdAt: number;
   authorUid: string;
   platform: 'pc' | 'android' | 'both';
+  logoUrl?: string;
+  previewUrl?: string;
+}
+
+interface SiteSettings {
+  siteName: string;
+  siteDescription: string;
+  siteAvatar: string;
+  vkUrl: string;
+  telegramUrl: string;
+  youtubeUrl: string;
 }
 
 export default function AdminView({ user }: AdminViewProps) {
@@ -32,13 +43,24 @@ export default function AdminView({ user }: AdminViewProps) {
   const [editingGame, setEditingGame] = useState<Partial<Game> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  const [activeTab, setActiveTab] = useState<'games' | 'settings'>('games');
+  const [settings, setSettings] = useState<SiteSettings>({
+    siteName: 'ice_game',
+    siteDescription: 'Каталог инди-игр и проектов',
+    siteAvatar: '',
+    vkUrl: '',
+    telegramUrl: '',
+    youtubeUrl: ''
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'games'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeGames = onSnapshot(q, (snapshot) => {
       const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
       setGames(gamesData);
       setLoading(false);
@@ -51,8 +73,33 @@ export default function AdminView({ user }: AdminViewProps) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as SiteSettings);
+      }
+    });
+
+    return () => {
+      unsubscribeGames();
+      unsubscribeSettings();
+    };
   }, []);
+
+  const handleSaveSettings = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    setMessage(null);
+    try {
+      await setDoc(doc(db, 'settings', 'general'), settings);
+      setMessage({ type: 'success', text: 'Настройки сайта сохранены!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Save settings error:", err);
+      setMessage({ type: 'error', text: 'Ошибка при сохранении настроек: ' + err.message });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -68,7 +115,7 @@ export default function AdminView({ user }: AdminViewProps) {
       const isNew = !editingGame.id;
       const gameId = editingGame.id || doc(collection(db, 'games')).id;
       
-      const gameData = {
+      const gameData: any = {
         title: editingGame.title,
         description: editingGame.description || '',
         version: editingGame.version || '1.0.0',
@@ -81,6 +128,9 @@ export default function AdminView({ user }: AdminViewProps) {
         authorUid: user.uid,
         platform: editingGame.platform || 'pc'
       };
+
+      if (editingGame.logoUrl) gameData.logoUrl = editingGame.logoUrl;
+      if (editingGame.previewUrl) gameData.previewUrl = editingGame.previewUrl;
 
       await setDoc(doc(db, 'games', gameId), gameData);
       setMessage({ type: 'success', text: 'Игра успешно сохранена!' });
@@ -170,10 +220,26 @@ export default function AdminView({ user }: AdminViewProps) {
         
         <nav className="flex-1 p-4 space-y-2">
           <button
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+            onClick={() => setActiveTab('games')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium ${
+              activeTab === 'games' 
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+            }`}
           >
             <BarChart2 className="w-5 h-5" />
             Управление играми
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium ${
+              activeTab === 'settings' 
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+            }`}
+          >
+            <Settings className="w-5 h-5" />
+            Настройки сайта
           </button>
         </nav>
 
@@ -203,83 +269,183 @@ export default function AdminView({ user }: AdminViewProps) {
             </div>
           )}
 
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Ваши игры</h1>
-              <p className="text-slate-400">Управляйте каталогом игр и отслеживайте статистику.</p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => window.open('/', '_blank')}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors border border-white/10"
-              >
-                На сайт
-              </button>
-              <button
-                onClick={() => {
-                  setEditingGame({});
-                  setIsModalOpen(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-xl text-sm font-bold transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Добавить игру
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {games.map(game => (
-              <div key={game.id} className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 flex flex-col">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="text-xl font-bold text-white">{game.title}</h3>
-                  <div className="flex gap-1 text-cyan-500/50">
-                    {(game.platform === 'pc' || game.platform === 'both') && <Monitor className="w-4 h-4" />}
-                    {(game.platform === 'android' || game.platform === 'both') && <Smartphone className="w-4 h-4" />}
-                  </div>
+          {activeTab === 'games' ? (
+            <>
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">Ваши игры</h1>
+                  <p className="text-slate-400">Управляйте каталогом игр и отслеживайте статистику.</p>
                 </div>
-                <p className="text-sm text-cyan-400 mb-4">v{game.version}</p>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
-                    <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-                      <Download className="w-3 h-3" /> Скачивания
-                    </div>
-                    <div className="text-xl font-semibold text-white">{game.downloads}</div>
-                  </div>
-                  <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
-                    <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-                      <Eye className="w-3 h-3" /> Просмотры
-                    </div>
-                    <div className="text-xl font-semibold text-white">{game.views}</div>
-                  </div>
-                </div>
-
-                <div className="mt-auto flex gap-2">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => window.open('/', '_blank')}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors border border-white/10"
+                  >
+                    На сайт
+                  </button>
                   <button
                     onClick={() => {
-                      setEditingGame(game);
+                      setEditingGame({});
                       setIsModalOpen(true);
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-xl text-sm font-bold transition-colors"
                   >
-                    <Edit3 className="w-4 h-4" /> Редактировать
-                  </button>
-                  <button
-                    onClick={() => handleDelete(game.id)}
-                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
+                    <Plus className="w-4 h-4" />
+                    Добавить игру
                   </button>
                 </div>
               </div>
-            ))}
-            {games.length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
-                У вас пока нет добавленных игр.
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {games.map(game => (
+                  <div key={game.id} className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 flex flex-col">
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="text-xl font-bold text-white">{game.title}</h3>
+                      <div className="flex gap-1 text-cyan-500/50">
+                        {(game.platform === 'pc' || game.platform === 'both') && <Monitor className="w-4 h-4" />}
+                        {(game.platform === 'android' || game.platform === 'both') && <Smartphone className="w-4 h-4" />}
+                      </div>
+                    </div>
+                    <p className="text-sm text-cyan-400 mb-4">v{game.version}</p>
+                    
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
+                        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                          <Download className="w-3 h-3" /> Скачивания
+                        </div>
+                        <div className="text-xl font-semibold text-white">{game.downloads}</div>
+                      </div>
+                      <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
+                        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                          <Eye className="w-3 h-3" /> Просмотры
+                        </div>
+                        <div className="text-xl font-semibold text-white">{game.views}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingGame(game);
+                          setIsModalOpen(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors"
+                      >
+                        <Edit3 className="w-4 h-4" /> Редактировать
+                      </button>
+                      <button
+                        onClick={() => handleDelete(game.id)}
+                        className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {games.length === 0 && (
+                  <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
+                    У вас пока нет добавленных игр.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="max-w-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">Настройки сайта</h1>
+                  <p className="text-slate-400">Измените название, описание и ссылки на соцсети.</p>
+                </div>
+                <button
+                  onClick={() => window.open('/', '_blank')}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors border border-white/10"
+                >
+                  На сайт
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="space-y-6 bg-slate-900 border border-cyan-500/10 rounded-3xl p-8">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-white border-b border-white/5 pb-2">Основное</h3>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Название сайта</label>
+                    <input
+                      type="text"
+                      required
+                      value={settings.siteName}
+                      onChange={e => setSettings({...settings, siteName: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Описание сайта</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={settings.siteDescription}
+                      onChange={e => setSettings({...settings, siteDescription: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all resize-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Ссылка на аватарку / логотип сайта</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={settings.siteAvatar}
+                      onChange={e => setSettings({...settings, siteAvatar: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <h3 className="text-lg font-bold text-white border-b border-white/5 pb-2">Социальные сети</h3>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">ВКонтакте (ссылка)</label>
+                    <input
+                      type="url"
+                      placeholder="https://vk.com/..."
+                      value={settings.vkUrl}
+                      onChange={e => setSettings({...settings, vkUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Telegram (ссылка)</label>
+                    <input
+                      type="url"
+                      placeholder="https://t.me/..."
+                      value={settings.telegramUrl}
+                      onChange={e => setSettings({...settings, telegramUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">YouTube (ссылка)</label>
+                    <input
+                      type="url"
+                      placeholder="https://youtube.com/..."
+                      value={settings.youtubeUrl}
+                      onChange={e => setSettings({...settings, youtubeUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={savingSettings}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {savingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                    {savingSettings ? 'Сохранение...' : 'Сохранить настройки'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
       </main>
 
@@ -324,6 +490,29 @@ export default function AdminView({ user }: AdminViewProps) {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Ссылка на логотип (квадрат)</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={editingGame?.logoUrl || ''}
+                      onChange={e => setEditingGame({...editingGame, logoUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Ссылка на превью (баннер)</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={editingGame?.previewUrl || ''}
+                      onChange={e => setEditingGame({...editingGame, previewUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Платформа</label>
                   <select
@@ -338,40 +527,18 @@ export default function AdminView({ user }: AdminViewProps) {
                 </div>
 
                 <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
-                  <h3 className="text-sm font-medium text-slate-300">Файл игры</h3>
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs text-slate-500">Вариант 1: Загрузить на сервер</label>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 px-4 py-3 bg-slate-950 border border-cyan-500/30 hover:border-cyan-500/60 text-cyan-400 rounded-xl cursor-pointer transition-colors">
-                        <UploadCloud className="w-5 h-5" />
-                        <span className="text-sm font-medium">Выбрать файл</span>
-                        <input type="file" className="hidden" onChange={handleFileUpload} />
-                      </label>
-                      <div className="flex-1 text-sm text-slate-400 truncate">
-                        {editingGame?.fileName && editingGame?.fileUrl?.includes('firebasestorage') ? editingGame.fileName : 'Файл не загружен'}
-                      </div>
-                    </div>
-                    {uploadProgress !== null && (
-                      <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden mt-2">
-                        <div 
-                          className="h-full bg-cyan-500 transition-all duration-300" 
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-4 py-2">
-                    <div className="h-px bg-white/10 flex-1"></div>
-                    <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">или</span>
-                    <div className="h-px bg-white/10 flex-1"></div>
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-300 mb-1">Файл игры</h3>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Так как сайт работает на GitHub Pages, файлы игр нужно хранить на внешних сервисах (например, в <b>GitHub Releases</b>, <b>Google Drive</b> или <b>Яндекс.Диске</b>). Просто загрузите файл туда и вставьте прямую ссылку ниже.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs text-slate-500">Вариант 2: Внешняя ссылка (GitHub Releases, Google Drive и др.)</label>
+                    <label className="text-xs text-slate-500">Ссылка на скачивание файла</label>
                     <input
                       type="url"
+                      required
                       placeholder="https://github.com/user/repo/releases/download/..."
                       value={editingGame?.fileUrl || ''}
                       onChange={e => setEditingGame({...editingGame, fileUrl: e.target.value})}

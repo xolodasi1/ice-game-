@@ -53,7 +53,18 @@ service cloud.firestore {
              data.createdAt is number &&
              data.authorUid is string && data.authorUid.size() > 0 &&
              data.platform in ['pc', 'android', 'both'] &&
-             (!('releaseNotes' in data) || (data.releaseNotes is string && data.releaseNotes.size() < 5000));
+             (!('releaseNotes' in data) || (data.releaseNotes is string && data.releaseNotes.size() < 5000)) &&
+             (!('logoUrl' in data) || data.logoUrl == "" || isValidUrl(data.logoUrl)) &&
+             (!('previewUrl' in data) || data.previewUrl == "" || isValidUrl(data.previewUrl));
+    }
+
+    function isValidSettings(data) {
+      return (!('siteName' in data) || (data.siteName is string && data.siteName.size() < 100)) &&
+             (!('siteDescription' in data) || (data.siteDescription is string && data.siteDescription.size() < 500)) &&
+             (!('siteAvatar' in data) || data.siteAvatar == "" || isValidUrl(data.siteAvatar)) &&
+             (!('vkUrl' in data) || data.vkUrl == "" || isValidUrl(data.vkUrl)) &&
+             (!('telegramUrl' in data) || data.telegramUrl == "" || isValidUrl(data.telegramUrl)) &&
+             (!('youtubeUrl' in data) || data.youtubeUrl == "" || isValidUrl(data.youtubeUrl));
     }
 
     function isOnlyIncrementingStats() {
@@ -79,6 +90,11 @@ service cloud.firestore {
       allow update: if (isAdmin() && isValidGame(request.resource.data) && request.resource.data.authorUid == resource.data.authorUid) || 
                        isOnlyIncrementingStats();
       allow delete: if isAdmin() && isOwner();
+    }
+
+    match /settings/{document} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidSettings(request.resource.data);
     }
 
     // Keep legacy rules for backward compatibility during transition
