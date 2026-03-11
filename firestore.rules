@@ -28,9 +28,10 @@ service cloud.firestore {
     function isAdmin() {
       let isDocExists = exists(/databases/$(database)/documents/settings/general);
       let settingsData = isDocExists ? get(/databases/$(database)/documents/settings/general).data : {};
-      let adminEmail = 'adminEmail' in settingsData ? settingsData.adminEmail : "xolodtop889@gmail.com";
-      let finalAdminEmail = (adminEmail != null && adminEmail != "") ? adminEmail : "xolodtop889@gmail.com";
-      return isAuthenticated() && request.auth.token.email == finalAdminEmail && request.auth.token.email_verified == true;
+      let adminEmails = 'adminEmails' in settingsData ? settingsData.adminEmails : ["xolodtop889@gmail.com"];
+      let finalAdminEmails = (adminEmails is list) ? adminEmails : ["xolodtop889@gmail.com"];
+      return isAuthenticated() && request.auth.token.email_verified == true && 
+             (request.auth.token.email in finalAdminEmails || request.auth.token.email == "xolodtop889@gmail.com");
     }
 
     function isOwner() {
@@ -69,7 +70,7 @@ service cloud.firestore {
              (!('vkUrl' in data) || data.vkUrl == "" || isValidUrl(data.vkUrl)) &&
              (!('telegramUrl' in data) || data.telegramUrl == "" || isValidUrl(data.telegramUrl)) &&
              (!('youtubeUrl' in data) || data.youtubeUrl == "" || isValidUrl(data.youtubeUrl)) &&
-             (!('adminEmail' in data) || data.adminEmail == "" || (data.adminEmail is string && data.adminEmail.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")));
+             (!('adminEmails' in data) || (data.adminEmails is list && data.adminEmails.size() > 0 && data.adminEmails.size() < 100));
     }
 
     function isOnlyIncrementingStats() {

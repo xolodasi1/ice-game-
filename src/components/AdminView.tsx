@@ -3,7 +3,7 @@ import { User, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor } from 'lucide-react';
+import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminViewProps {
@@ -34,7 +34,7 @@ interface SiteSettings {
   vkUrl: string;
   telegramUrl: string;
   youtubeUrl: string;
-  adminEmail: string;
+  adminEmails?: string[];
 }
 
 export default function AdminView({ user }: AdminViewProps) {
@@ -44,8 +44,9 @@ export default function AdminView({ user }: AdminViewProps) {
   const [editingGame, setEditingGame] = useState<Partial<Game> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'games' | 'settings'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'settings' | 'admins'>('games');
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: 'ice_game',
     siteDescription: 'Каталог инди-игр и проектов',
@@ -53,7 +54,7 @@ export default function AdminView({ user }: AdminViewProps) {
     vkUrl: '',
     telegramUrl: '',
     youtubeUrl: '',
-    adminEmail: 'xolodtop889@gmail.com'
+    adminEmails: ['xolodtop889@gmail.com']
   });
   const [savingSettings, setSavingSettings] = useState(false);
   
@@ -77,16 +78,23 @@ export default function AdminView({ user }: AdminViewProps) {
     });
 
     const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
-      let currentAdminEmail = 'xolodtop889@gmail.com';
+      let currentAdminEmails = ['xolodtop889@gmail.com'];
       if (docSnap.exists()) {
-        const data = docSnap.data() as SiteSettings;
+        const data = docSnap.data() as any;
+        
+        // Handle migration from old string to array
+        if (data.adminEmail && !data.adminEmails) {
+          data.adminEmails = [data.adminEmail];
+          delete data.adminEmail;
+        }
+        
         setSettings(prev => ({ ...prev, ...data }));
-        if (data.adminEmail) {
-          currentAdminEmail = data.adminEmail;
+        if (data.adminEmails && Array.isArray(data.adminEmails)) {
+          currentAdminEmails = data.adminEmails;
         }
       }
       
-      if (user.email === currentAdminEmail) {
+      if (user.email && (currentAdminEmails.includes(user.email) || user.email === 'xolodtop889@gmail.com')) {
         setIsAdminUser(true);
       } else {
         setIsAdminUser(false);
@@ -98,6 +106,56 @@ export default function AdminView({ user }: AdminViewProps) {
       unsubscribeSettings();
     };
   }, []);
+
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail || !newAdminEmail.includes('@')) {
+      setMessage({ type: 'error', text: 'Введите корректный email' });
+      return;
+    }
+    
+    const currentAdmins = settings.adminEmails || ['xolodtop889@gmail.com'];
+    if (currentAdmins.includes(newAdminEmail)) {
+      setMessage({ type: 'error', text: 'Этот пользователь уже является администратором' });
+      return;
+    }
+
+    const updatedAdmins = [...currentAdmins, newAdminEmail];
+    const updatedSettings = { ...settings, adminEmails: updatedAdmins };
+    
+    setSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'settings', 'general'), updatedSettings);
+      setSettings(updatedSettings);
+      setNewAdminEmail('');
+      setMessage({ type: 'success', text: 'Администратор добавлен!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      setMessage({ type: 'error', text: 'Ошибка: ' + err.message });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (emailToRemove: string) => {
+    if (emailToRemove === 'xolodtop889@gmail.com') return;
+    if (!window.confirm(`Удалить администратора ${emailToRemove}?`)) return;
+
+    const currentAdmins = settings.adminEmails || ['xolodtop889@gmail.com'];
+    const updatedAdmins = currentAdmins.filter(email => email !== emailToRemove);
+    const updatedSettings = { ...settings, adminEmails: updatedAdmins };
+
+    setSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'settings', 'general'), updatedSettings);
+      setSettings(updatedSettings);
+      setMessage({ type: 'success', text: 'Администратор удален!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      setMessage({ type: 'error', text: 'Ошибка: ' + err.message });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleSaveSettings = async (e: FormEvent) => {
     e.preventDefault();
@@ -249,43 +307,66 @@ export default function AdminView({ user }: AdminViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-cyan-500/10 bg-slate-900/50 flex flex-col">
-        <div className="p-6 border-b border-cyan-500/10">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Settings className="w-5 h-5 text-cyan-400" />
-            ice_game Admin
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 truncate">{user.email}</p>
+      <aside className="w-full md:w-64 md:min-h-screen border-b md:border-b-0 md:border-r border-cyan-500/10 bg-slate-900/50 flex flex-col shrink-0">
+        <div className="p-4 md:p-6 border-b border-cyan-500/10 flex justify-between items-center md:block">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Settings className="w-5 h-5 text-cyan-400" />
+              ice_game Admin
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px] md:max-w-full">{user.email}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="md:hidden p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+            title="Выйти"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex md:flex-col p-2 md:p-4 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('games')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
               activeTab === 'games' 
                 ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
                 : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
             }`}
           >
             <BarChart2 className="w-5 h-5" />
-            Управление играми
+            <span className="hidden sm:inline md:inline">Управление играми</span>
+            <span className="sm:hidden">Игры</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
               activeTab === 'settings' 
                 ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
                 : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
             }`}
           >
             <Settings className="w-5 h-5" />
-            Настройки сайта
+            <span className="hidden sm:inline md:inline">Настройки сайта</span>
+            <span className="sm:hidden">Настройки</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('admins')}
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+              activeTab === 'admins' 
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span className="hidden sm:inline md:inline">Администраторы</span>
+            <span className="sm:hidden">Админы</span>
           </button>
         </nav>
 
-        <div className="p-4 border-t border-cyan-500/10">
+        <div className="hidden md:block p-4 border-t border-cyan-500/10 mt-auto">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm font-medium"
@@ -297,7 +378,7 @@ export default function AdminView({ user }: AdminViewProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8 lg:p-12 relative">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative w-full">
         <div className="max-w-5xl mx-auto">
           
           {message && (
@@ -475,24 +556,6 @@ export default function AdminView({ user }: AdminViewProps) {
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-4">
-                  <h3 className="text-lg font-bold text-white border-b border-white/5 pb-2">Доступ</h3>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Email администратора</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="example@gmail.com"
-                      value={settings.adminEmail}
-                      onChange={e => setSettings({...settings, adminEmail: e.target.value})}
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
-                    />
-                    <p className="text-xs text-red-400 mt-1">
-                      Внимание: если вы измените этот email на другой, вы сразу же потеряете доступ к админке!
-                    </p>
-                  </div>
-                </div>
-
                 <div className="pt-4 flex justify-end">
                   <button
                     type="submit"
@@ -504,6 +567,68 @@ export default function AdminView({ user }: AdminViewProps) {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'admins' && (
+            <div className="max-w-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">Администраторы</h1>
+                  <p className="text-slate-400">Управление пользователями, имеющими доступ к админ-панели.</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-8 mb-6">
+                <h3 className="text-lg font-bold text-white border-b border-white/5 pb-4 mb-4">Добавить администратора</h3>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="email"
+                    placeholder="email@example.com"
+                    value={newAdminEmail}
+                    onChange={e => setNewAdminEmail(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                  />
+                  <button
+                    onClick={handleAddAdmin}
+                    disabled={!newAdminEmail || savingSettings}
+                    className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    Добавить
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-8">
+                <h3 className="text-lg font-bold text-white border-b border-white/5 pb-4 mb-4">Список администраторов</h3>
+                <div className="space-y-3">
+                  {(settings.adminEmails || ['xolodtop889@gmail.com']).map(email => (
+                    <div key={email} className="flex items-center justify-between bg-slate-950 border border-white/5 p-4 rounded-xl">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span className="text-white font-medium break-all">{email}</span>
+                        <div className="flex gap-2">
+                          {email === 'xolodtop889@gmail.com' && (
+                            <span className="text-xs font-bold text-cyan-500 bg-cyan-500/10 px-2 py-1 rounded-md whitespace-nowrap">Владелец</span>
+                          )}
+                          {email === user.email && email !== 'xolodtop889@gmail.com' && (
+                            <span className="text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap">Вы</span>
+                          )}
+                        </div>
+                      </div>
+                      {email !== 'xolodtop889@gmail.com' && email !== user.email && (
+                        <button
+                          onClick={() => handleRemoveAdmin(email)}
+                          disabled={savingSettings}
+                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          title="Удалить администратора"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>

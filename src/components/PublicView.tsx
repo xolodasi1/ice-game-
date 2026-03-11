@@ -160,11 +160,11 @@ export default function PublicView() {
                   )}
                 </div>
                 
-                <div className="flex items-center gap-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
                   {selectedGame.logoUrl && (
-                    <img src={selectedGame.logoUrl} alt="Game Logo" className="w-24 h-24 rounded-3xl object-cover shadow-xl shadow-cyan-900/20 border border-white/10" />
+                    <img src={selectedGame.logoUrl} alt="Game Logo" className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl object-cover shadow-xl shadow-cyan-900/20 border border-white/10 shrink-0" />
                   )}
-                  <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
+                  <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
                     {selectedGame.title}
                   </h1>
                 </div>
@@ -221,22 +221,22 @@ export default function PublicView() {
                 <p className="text-slate-400 text-lg whitespace-pre-wrap">{settings.siteDescription}</p>
               </div>
               
-              <div className="flex bg-slate-900 border border-cyan-500/20 rounded-xl p-1 self-center md:self-auto">
+              <div className="flex flex-wrap justify-center bg-slate-900 border border-cyan-500/20 rounded-xl p-1 self-center md:self-auto gap-1">
                 <button
                   onClick={() => setFilter('all')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'all' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'all' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
                   Все
                 </button>
                 <button
                   onClick={() => setFilter('pc')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'pc' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'pc' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
                   <Monitor className="w-4 h-4" /> PC
                 </button>
                 <button
                   onClick={() => setFilter('android')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'android' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'android' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
                   <Smartphone className="w-4 h-4" /> Android
                 </button>
