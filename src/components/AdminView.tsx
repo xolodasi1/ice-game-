@@ -34,6 +34,7 @@ interface SiteSettings {
   vkUrl: string;
   telegramUrl: string;
   youtubeUrl: string;
+  adminEmail: string;
 }
 
 export default function AdminView({ user }: AdminViewProps) {
@@ -44,13 +45,15 @@ export default function AdminView({ user }: AdminViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'games' | 'settings'>('games');
+  const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null);
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: 'ice_game',
     siteDescription: 'Каталог инди-игр и проектов',
     siteAvatar: '',
     vkUrl: '',
     telegramUrl: '',
-    youtubeUrl: ''
+    youtubeUrl: '',
+    adminEmail: 'xolodtop889@gmail.com'
   });
   const [savingSettings, setSavingSettings] = useState(false);
   
@@ -74,8 +77,19 @@ export default function AdminView({ user }: AdminViewProps) {
     });
 
     const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      let currentAdminEmail = 'xolodtop889@gmail.com';
       if (docSnap.exists()) {
-        setSettings(docSnap.data() as SiteSettings);
+        const data = docSnap.data() as SiteSettings;
+        setSettings(prev => ({ ...prev, ...data }));
+        if (data.adminEmail) {
+          currentAdminEmail = data.adminEmail;
+        }
+      }
+      
+      if (user.email === currentAdminEmail) {
+        setIsAdminUser(true);
+      } else {
+        setIsAdminUser(false);
       }
     });
 
@@ -198,10 +212,38 @@ export default function AdminView({ user }: AdminViewProps) {
     navigate('/');
   };
 
-  if (loading) {
+  if (loading || isAdminUser === null) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-400">
         <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isAdminUser === false) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-200 p-4">
+        <div className="bg-slate-900 border border-red-500/20 p-8 rounded-3xl max-w-md w-full text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">Доступ запрещен</h1>
+          <p className="text-slate-400 mb-8">
+            Ваш аккаунт ({user.email}) не имеет прав администратора.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white font-medium rounded-xl transition-colors"
+            >
+              На главную
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-xl transition-colors"
+            >
+              Выйти
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -430,6 +472,24 @@ export default function AdminView({ user }: AdminViewProps) {
                       onChange={e => setSettings({...settings, youtubeUrl: e.target.value})}
                       className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <h3 className="text-lg font-bold text-white border-b border-white/5 pb-2">Доступ</h3>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Email администратора</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="example@gmail.com"
+                      value={settings.adminEmail}
+                      onChange={e => setSettings({...settings, adminEmail: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                    <p className="text-xs text-red-400 mt-1">
+                      Внимание: если вы измените этот email на другой, вы сразу же потеряете доступ к админке!
+                    </p>
                   </div>
                 </div>
 
