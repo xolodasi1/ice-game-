@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "Game": {
+      "title": "Game",
+      "description": "A game uploaded by the admin",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "version": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "releaseNotes": { "type": "string" },
+        "views": { "type": "number" },
+        "downloads": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "authorUid": { "type": "string" },
+        "platform": { "type": "string", "enum": ["pc", "android", "both"] }
+      },
+      "required": ["title", "fileUrl", "views", "downloads", "createdAt", "authorUid", "platform"]
+    }
+  },
+  "firestore": {
+    "games/{gameId}": {
+      "schema": { "$ref": "#/entities/Game" },
+      "description": "Stores all games"
+    }
+  }
+}
