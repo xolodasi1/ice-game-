@@ -45,6 +45,7 @@ interface Comment {
   authorName: string;
   text: string;
   createdAt: number;
+  likedBy?: string[];
 }
 
 export default function AdminView({ user }: AdminViewProps) {
@@ -436,7 +437,7 @@ export default function AdminView({ user }: AdminViewProps) {
             </div>
           )}
 
-          {activeTab === 'games' ? (
+          {activeTab === 'games' && (
             <>
               <div className="flex items-center justify-between mb-8">
                 <div>
@@ -516,7 +517,9 @@ export default function AdminView({ user }: AdminViewProps) {
                 )}
               </div>
             </>
-          ) : (
+          )}
+
+          {activeTab === 'settings' && (
             <div className="max-w-2xl">
               <div className="flex items-center justify-between mb-8">
                 <div>

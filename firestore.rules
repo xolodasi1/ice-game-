@@ -80,7 +80,15 @@ service cloud.firestore {
              data.gameId is string && data.gameId.size() > 0 &&
              data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 50 &&
              data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
-             data.createdAt is number;
+             data.createdAt is number &&
+             (!('likedBy' in data) || data.likedBy is list);
+    }
+
+    function isOnlyIncrementingCommentStats() {
+      let diff = request.resource.data.diff(resource.data);
+      let allowedKeys = diff.affectedKeys().hasOnly(['likedBy']);
+      let votesValid = !diff.affectedKeys().hasAny(['likedBy']) || isAuthenticated();
+      return allowedKeys && votesValid;
     }
 
     function isOnlyIncrementingStats() {
@@ -113,7 +121,8 @@ service cloud.firestore {
     match /comments/{commentId} {
       allow read: if true;
       allow create: if isAuthenticated() && isValidComment(request.resource.data);
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || isOnlyIncrementingCommentStats();
+      allow delete: if isAdmin();
     }
 
     match /settings/{document} {

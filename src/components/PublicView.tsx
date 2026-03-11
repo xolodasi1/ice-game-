@@ -38,6 +38,7 @@ interface Comment {
   authorName: string;
   text: string;
   createdAt: number;
+  likedBy?: string[];
 }
 
 export default function PublicView() {
@@ -59,6 +60,7 @@ export default function PublicView() {
   const [newCommentName, setNewCommentName] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentSort, setCommentSort] = useState<'newest' | 'popular'>('newest');
 
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -238,6 +240,48 @@ export default function PublicView() {
     }
   };
 
+  const handleCommentVote = async (commentId: string) => {
+    if (!user) {
+      alert("Пожалуйста, войдите в систему, чтобы голосовать.");
+      return;
+    }
+    
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+
+    const likedBy = comment.likedBy || [];
+    const hasLiked = likedBy.includes(user.uid);
+    let newLikedBy = [...likedBy];
+
+    if (hasLiked) {
+      newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+    } else {
+      newLikedBy.push(user.uid);
+    }
+
+    try {
+      await updateDoc(doc(db, 'comments', commentId), {
+        likedBy: newLikedBy
+      });
+      // Optimistic update
+      setComments(comments.map(c => c.id === commentId ? { ...c, likedBy: newLikedBy } : c));
+    } catch (error) {
+      console.error("Comment vote failed", error);
+      alert("Не удалось сохранить голос. Попробуйте позже.");
+    }
+  };
+
+  const sortedComments = [...comments].sort((a, b) => {
+    if (commentSort === 'popular') {
+      const aLikes = (a.likedBy || []).length;
+      const bLikes = (b.likedBy || []).length;
+      if (aLikes !== bLikes) {
+        return bLikes - aLikes;
+      }
+    }
+    return b.createdAt - a.createdAt;
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-400">
@@ -399,10 +443,22 @@ export default function PublicView() {
             {/* Comments Section */}
             <div className="mt-20 pt-16 border-t border-cyan-500/10">
               <div className="max-w-3xl">
-                <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
-                  <MessageSquare className="w-6 h-6 text-cyan-400" />
-                  Комментарии ({comments.length})
-                </h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <MessageSquare className="w-6 h-6 text-cyan-400" />
+                    Комментарии ({comments.length})
+                  </h2>
+                  {comments.length > 0 && (
+                    <select
+                      value={commentSort}
+                      onChange={(e) => setCommentSort(e.target.value as 'newest' | 'popular')}
+                      className="bg-slate-900 border border-white/10 text-slate-300 text-sm font-medium rounded-xl px-4 py-2.5 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all cursor-pointer"
+                    >
+                      <option value="newest">Сначала новые</option>
+                      <option value="popular">Сначала популярные</option>
+                    </select>
+                  )}
+                </div>
                 
                 {user ? (
                   <form onSubmit={handleSubmitComment} className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 mb-10">
@@ -460,12 +516,12 @@ export default function PublicView() {
                 )}
 
                 <div className="space-y-6">
-                  {comments.length === 0 ? (
+                  {sortedComments.length === 0 ? (
                     <div className="text-center py-10 text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
                       Пока нет комментариев. Будьте первым!
                     </div>
                   ) : (
-                    comments.map(comment => (
+                    sortedComments.map(comment => (
                       <div key={comment.id} className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
                         <div className="flex items-center justify-between mb-3">
                           <span className="font-bold text-cyan-400">{comment.authorName}</span>
@@ -476,6 +532,19 @@ export default function PublicView() {
                         <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">
                           {comment.text}
                         </p>
+                        <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5">
+                          <button
+                            onClick={() => handleCommentVote(comment.id)}
+                            className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                              user && (comment.likedBy || []).includes(user.uid)
+                                ? 'text-cyan-400'
+                                : 'text-slate-500 hover:text-cyan-400'
+                            }`}
+                          >
+                            <ThumbsUp className="w-4 h-4" />
+                            {(comment.likedBy || []).length > 0 ? (comment.likedBy || []).length : 'Лайк'}
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
