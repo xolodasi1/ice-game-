@@ -10,11 +10,21 @@ export default function Auth() {
 
   const handleLogin = async () => {
     try {
+      setError(null);
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       navigate('/admin');
     } catch (err: any) {
-      setError(err.message || 'Ошибка при входе');
+      console.error("Login error:", err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        setError('Вход отменен. Пожалуйста, не закрывайте всплывающее окно до завершения авторизации.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('Всплывающее окно заблокировано браузером. Пожалуйста, разрешите всплывающие окна для этого сайта.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Ошибка сети. Проверьте подключение к интернету.');
+      } else {
+        setError(err.message || 'Произошла неизвестная ошибка при входе.');
+      }
     }
   };
 
