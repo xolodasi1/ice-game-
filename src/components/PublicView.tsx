@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, doc, getDocs, updateDoc, increment, query, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor } from 'lucide-react';
+import { collection, doc, getDocs, updateDoc, increment, query, orderBy, addDoc, onSnapshot, where } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor, MessageSquare, Send, ThumbsUp, ThumbsDown, LogIn, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Game {
@@ -18,6 +19,8 @@ interface Game {
   platform: 'pc' | 'android' | 'both';
   logoUrl?: string;
   previewUrl?: string;
+  likedBy?: string[];
+  dislikedBy?: string[];
 }
 
 interface SiteSettings {
@@ -27,6 +30,14 @@ interface SiteSettings {
   vkUrl: string;
   telegramUrl: string;
   youtubeUrl: string;
+}
+
+interface Comment {
+  id: string;
+  gameId: string;
+  authorName: string;
+  text: string;
+  createdAt: number;
 }
 
 export default function PublicView() {
@@ -43,6 +54,24 @@ export default function PublicView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pc' | 'android'>('all');
+  
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newCommentName, setNewCommentName] = useState('');
+  const [newCommentText, setNewCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        setNewCommentName(currentUser.displayName || currentUser.email?.split('@')[0] || '');
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,7 +84,16 @@ export default function PublicView() {
         const settingsDoc = await getDocs(query(collection(db, 'settings')));
         settingsDoc.forEach(doc => {
           if (doc.id === 'general') {
-            setSettings(prev => ({ ...prev, ...doc.data() }));
+            const data = doc.data() as any;
+            setSettings(prev => ({ ...prev, ...data }));
+            
+            // Check admin status
+            const adminEmails = data.adminEmails || (data.adminEmail ? [data.adminEmail] : ['xolodtop889@gmail.com']);
+            if (user?.email && (adminEmails.includes(user.email) || user.email === 'xolodtop889@gmail.com')) {
+              setIsAdmin(true);
+            } else {
+              setIsAdmin(false);
+            }
           }
         });
       } catch (err: any) {
@@ -70,7 +108,20 @@ export default function PublicView() {
     };
 
     fetchData();
-  }, []);
+  }, [user]);
+
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login failed", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
 
   const handleViewGame = async (game: Game) => {
     setSelectedGame(game);
@@ -83,6 +134,48 @@ export default function PublicView() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedGame) return;
+    
+    const q = query(
+      collection(db, 'comments'),
+      where('gameId', '==', selectedGame.id),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+      setComments(commentsData);
+    });
+    
+    return () => unsubscribe();
+  }, [selectedGame]);
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      alert("Пожалуйста, войдите в систему, чтобы оставить комментарий.");
+      return;
+    }
+    if (!selectedGame || !newCommentName.trim() || !newCommentText.trim()) return;
+    
+    setSubmittingComment(true);
+    try {
+      await addDoc(collection(db, 'comments'), {
+        gameId: selectedGame.id,
+        authorName: newCommentName.trim(),
+        text: newCommentText.trim(),
+        createdAt: Date.now()
+      });
+      setNewCommentText('');
+    } catch (err) {
+      console.error("Failed to add comment", err);
+      alert("Не удалось отправить комментарий. Попробуйте позже.");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
   const handleDownload = async (game: Game) => {
     try {
       await updateDoc(doc(db, 'games', game.id), {
@@ -92,6 +185,57 @@ export default function PublicView() {
       console.error("Failed to increment downloads", e);
     }
     window.open(game.fileUrl, '_blank');
+  };
+
+  const handleVote = async (gameId: string, type: 'like' | 'dislike') => {
+    if (!user) {
+      alert("Пожалуйста, войдите в систему, чтобы голосовать.");
+      return;
+    }
+    
+    const game = games.find(g => g.id === gameId);
+    if (!game) return;
+
+    const likedBy = game.likedBy || [];
+    const dislikedBy = game.dislikedBy || [];
+    
+    const hasLiked = likedBy.includes(user.uid);
+    const hasDisliked = dislikedBy.includes(user.uid);
+
+    let newLikedBy = [...likedBy];
+    let newDislikedBy = [...dislikedBy];
+
+    if (type === 'like') {
+      if (hasLiked) {
+        newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+      } else {
+        newLikedBy.push(user.uid);
+        newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
+      }
+    } else {
+      if (hasDisliked) {
+        newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
+      } else {
+        newDislikedBy.push(user.uid);
+        newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+      }
+    }
+
+    try {
+      await updateDoc(doc(db, 'games', gameId), {
+        likedBy: newLikedBy,
+        dislikedBy: newDislikedBy
+      });
+      
+      const updatedGames = games.map(g => g.id === gameId ? { ...g, likedBy: newLikedBy, dislikedBy: newDislikedBy } : g);
+      setGames(updatedGames);
+      if (selectedGame?.id === gameId) {
+        setSelectedGame({ ...selectedGame, likedBy: newLikedBy, dislikedBy: newDislikedBy });
+      }
+    } catch (error) {
+      console.error("Vote failed", error);
+      alert("Не удалось сохранить голос. Попробуйте позже.");
+    }
   };
 
   if (loading) {
@@ -115,9 +259,24 @@ export default function PublicView() {
             )}
             {settings.siteName}
           </div>
-          <Link to="/admin" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">
-            Панель автора
-          </Link>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                {isAdmin && (
+                  <Link to="/admin" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">
+                    Панель автора
+                  </Link>
+                )}
+                <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1.5">
+                  <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Выйти</span>
+                </button>
+              </>
+            ) : (
+              <button onClick={handleLogin} className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1.5">
+                <LogIn className="w-4 h-4" /> Войти
+              </button>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -181,6 +340,31 @@ export default function PublicView() {
                     <Download className="w-5 h-5" />
                     Скачать игру
                   </button>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleVote(selectedGame.id, 'like')}
+                      className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-bold transition-all ${
+                        user && (selectedGame.likedBy || []).includes(user.uid)
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-slate-900 text-slate-400 border border-white/10 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ThumbsUp className="w-5 h-5" />
+                      {(selectedGame.likedBy || []).length}
+                    </button>
+                    <button
+                      onClick={() => handleVote(selectedGame.id, 'dislike')}
+                      className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-bold transition-all ${
+                        user && (selectedGame.dislikedBy || []).includes(user.uid)
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : 'bg-slate-900 text-slate-400 border border-white/10 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ThumbsDown className="w-5 h-5" />
+                      {(selectedGame.dislikedBy || []).length}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -211,6 +395,93 @@ export default function PublicView() {
                 </div>
               </div>
             )}
+
+            {/* Comments Section */}
+            <div className="mt-20 pt-16 border-t border-cyan-500/10">
+              <div className="max-w-3xl">
+                <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+                  <MessageSquare className="w-6 h-6 text-cyan-400" />
+                  Комментарии ({comments.length})
+                </h2>
+                
+                {user ? (
+                  <form onSubmit={handleSubmitComment} className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 mb-10">
+                    <h3 className="text-lg font-bold text-white mb-4">Оставить комментарий</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ваше имя"
+                          maxLength={50}
+                          value={newCommentName}
+                          onChange={(e) => setNewCommentName(e.target.value)}
+                          className="w-full sm:w-64 bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <textarea
+                          required
+                          placeholder="Что вы думаете об игре?"
+                          maxLength={1000}
+                          rows={3}
+                          value={newCommentText}
+                          onChange={(e) => setNewCommentText(e.target.value)}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all resize-none"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={submittingComment || !newCommentName.trim() || !newCommentText.trim()}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {submittingComment ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                          Отправить
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-8 mb-10 text-center">
+                    <MessageSquare className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-white mb-2">Войдите, чтобы оставить комментарий</h3>
+                    <p className="text-slate-400 mb-6 max-w-md mx-auto">
+                      Только зарегистрированные пользователи могут оставлять комментарии и оценивать игры.
+                    </p>
+                    <button
+                      onClick={handleLogin}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-colors"
+                    >
+                      <LogIn className="w-5 h-5" />
+                      Войти через Google
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  {comments.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
+                      Пока нет комментариев. Будьте первым!
+                    </div>
+                  ) : (
+                    comments.map(comment => (
+                      <div key={comment.id} className="bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-bold text-cyan-400">{comment.authorName}</span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(comment.createdAt).toLocaleDateString()} в {new Date(comment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">
+                          {comment.text}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           // Games List View
@@ -289,8 +560,9 @@ export default function PublicView() {
                       v{game.version}
                     </span>
                     <div className="flex items-center gap-4 text-slate-500 text-xs font-medium">
-                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {game.views}</span>
-                      <span className="flex items-center gap-1"><Download className="w-3 h-3" /> {game.downloads}</span>
+                      <span className="flex items-center gap-1" title="Лайки"><ThumbsUp className="w-3 h-3" /> {(game.likedBy || []).length}</span>
+                      <span className="flex items-center gap-1" title="Просмотры"><Eye className="w-3 h-3" /> {game.views}</span>
+                      <span className="flex items-center gap-1" title="Скачивания"><Download className="w-3 h-3" /> {game.downloads}</span>
                     </div>
                   </div>
                 </div>

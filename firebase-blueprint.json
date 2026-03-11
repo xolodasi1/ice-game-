@@ -15,15 +15,33 @@
         "downloads": { "type": "number" },
         "createdAt": { "type": "number" },
         "authorUid": { "type": "string" },
-        "platform": { "type": "string", "enum": ["pc", "android", "both"] }
+        "platform": { "type": "string", "enum": ["pc", "android", "both"] },
+        "likedBy": { "type": "array", "items": { "type": "string" } },
+        "dislikedBy": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["title", "fileUrl", "views", "downloads", "createdAt", "authorUid", "platform"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment left by a user on a game",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["gameId", "authorName", "text", "createdAt"]
     }
   },
   "firestore": {
     "games/{gameId}": {
       "schema": { "$ref": "#/entities/Game" },
       "description": "Stores all games"
+    },
+    "comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Stores all comments for games"
     }
   }
 }

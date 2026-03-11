@@ -60,7 +60,9 @@ service cloud.firestore {
              data.platform in ['pc', 'android', 'both'] &&
              (!('releaseNotes' in data) || (data.releaseNotes is string && data.releaseNotes.size() < 5000)) &&
              (!('logoUrl' in data) || data.logoUrl == "" || isValidUrl(data.logoUrl)) &&
-             (!('previewUrl' in data) || data.previewUrl == "" || isValidUrl(data.previewUrl));
+             (!('previewUrl' in data) || data.previewUrl == "" || isValidUrl(data.previewUrl)) &&
+             (!('likedBy' in data) || data.likedBy is list) &&
+             (!('dislikedBy' in data) || data.dislikedBy is list);
     }
 
     function isValidSettings(data) {
@@ -73,9 +75,17 @@ service cloud.firestore {
              (!('adminEmails' in data) || (data.adminEmails is list && data.adminEmails.size() > 0 && data.adminEmails.size() < 100));
     }
 
+    function isValidComment(data) {
+      return hasRequiredFields(['gameId', 'authorName', 'text', 'createdAt']) &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 50 &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
+             data.createdAt is number;
+    }
+
     function isOnlyIncrementingStats() {
       let diff = request.resource.data.diff(resource.data);
-      let allowedKeys = diff.affectedKeys().hasOnly(['views', 'downloads']);
+      let allowedKeys = diff.affectedKeys().hasOnly(['views', 'downloads', 'likedBy', 'dislikedBy']);
       
       let viewsValid = !diff.affectedKeys().hasAny(['views']) || 
                        (request.resource.data.views is number && request.resource.data.views == resource.data.views + 1);
@@ -83,7 +93,9 @@ service cloud.firestore {
       let downloadsValid = !diff.affectedKeys().hasAny(['downloads']) || 
                            (request.resource.data.downloads is number && request.resource.data.downloads == resource.data.downloads + 1);
                            
-      return allowedKeys && viewsValid && downloadsValid;
+      let votesValid = !diff.affectedKeys().hasAny(['likedBy', 'dislikedBy']) || isAuthenticated();
+                           
+      return allowedKeys && viewsValid && downloadsValid && votesValid;
     }
 
     match /games/{gameId} {
@@ -96,6 +108,12 @@ service cloud.firestore {
       allow update: if (isAdmin() && isValidGame(request.resource.data) && request.resource.data.authorUid == resource.data.authorUid) || 
                        isOnlyIncrementingStats();
       allow delete: if isAdmin() && isOwner();
+    }
+
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidComment(request.resource.data);
+      allow update, delete: if isAdmin();
     }
 
     match /settings/{document} {

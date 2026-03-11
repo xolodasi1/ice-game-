@@ -1,9 +1,9 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users } from 'lucide-react';
+import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminViewProps {
@@ -25,6 +25,8 @@ interface Game {
   platform: 'pc' | 'android' | 'both';
   logoUrl?: string;
   previewUrl?: string;
+  likedBy?: string[];
+  dislikedBy?: string[];
 }
 
 interface SiteSettings {
@@ -37,6 +39,14 @@ interface SiteSettings {
   adminEmails?: string[];
 }
 
+interface Comment {
+  id: string;
+  gameId: string;
+  authorName: string;
+  text: string;
+  createdAt: number;
+}
+
 export default function AdminView({ user }: AdminViewProps) {
   const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
@@ -44,7 +54,7 @@ export default function AdminView({ user }: AdminViewProps) {
   const [editingGame, setEditingGame] = useState<Partial<Game> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'games' | 'settings' | 'admins'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'settings' | 'admins' | 'comments'>('games');
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [settings, setSettings] = useState<SiteSettings>({
@@ -61,6 +71,7 @@ export default function AdminView({ user }: AdminViewProps) {
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
 
   useEffect(() => {
     const q = query(collection(db, 'games'), orderBy('createdAt', 'desc'));
@@ -101,9 +112,16 @@ export default function AdminView({ user }: AdminViewProps) {
       }
     });
 
+    const qComments = query(collection(db, 'comments'), orderBy('createdAt', 'desc'));
+    const unsubscribeComments = onSnapshot(qComments, (snapshot) => {
+      const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+      setComments(commentsData);
+    });
+
     return () => {
       unsubscribeGames();
       unsubscribeSettings();
+      unsubscribeComments();
     };
   }, []);
 
@@ -198,7 +216,9 @@ export default function AdminView({ user }: AdminViewProps) {
         downloads: isNew ? 0 : editingGame.downloads,
         createdAt: isNew ? Date.now() : editingGame.createdAt,
         authorUid: user.uid,
-        platform: editingGame.platform || 'pc'
+        platform: editingGame.platform || 'pc',
+        likedBy: isNew ? [] : (editingGame.likedBy || []),
+        dislikedBy: isNew ? [] : (editingGame.dislikedBy || [])
       };
 
       if (editingGame.logoUrl) gameData.logoUrl = editingGame.logoUrl;
@@ -224,6 +244,18 @@ export default function AdminView({ user }: AdminViewProps) {
       setTimeout(() => setMessage(null), 3000);
     } catch (err: any) {
       console.error("Delete error:", err);
+      setMessage({ type: 'error', text: 'Ошибка при удалении: ' + err.message });
+    }
+  };
+
+  const handleDeleteComment = async (id: string) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот комментарий?')) return;
+    try {
+      await deleteDoc(doc(db, 'comments', id));
+      setMessage({ type: 'success', text: 'Комментарий удален.' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Delete comment error:", err);
       setMessage({ type: 'error', text: 'Ошибка при удалении: ' + err.message });
     }
   };
@@ -363,6 +395,18 @@ export default function AdminView({ user }: AdminViewProps) {
             <Users className="w-5 h-5" />
             <span className="hidden sm:inline md:inline">Администраторы</span>
             <span className="sm:hidden">Админы</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+              activeTab === 'comments' 
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+            }`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span className="hidden sm:inline md:inline">Комментарии</span>
+            <span className="sm:hidden">Комменты</span>
           </button>
         </nav>
 
@@ -628,6 +672,56 @@ export default function AdminView({ user }: AdminViewProps) {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'comments' && (
+            <div className="max-w-4xl">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">Комментарии</h1>
+                  <p className="text-slate-400">Модерация комментариев пользователей.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {comments.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
+                    Комментариев пока нет.
+                  </div>
+                ) : (
+                  comments.map(comment => {
+                    const game = games.find(g => g.id === comment.gameId);
+                    return (
+                      <div key={comment.id} className="bg-slate-900 border border-cyan-500/10 rounded-2xl p-6 flex flex-col sm:flex-row gap-4 justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-bold text-cyan-400">{comment.authorName}</span>
+                            <span className="text-xs text-slate-500">
+                              {new Date(comment.createdAt).toLocaleDateString()} в {new Date(comment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                          </div>
+                          <p className="text-slate-300 whitespace-pre-wrap leading-relaxed mb-3">
+                            {comment.text}
+                          </p>
+                          {game && (
+                            <div className="text-xs text-slate-500 flex items-center gap-1">
+                              К игре: <span className="text-slate-400 font-medium">{game.title}</span>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
+                          title="Удалить комментарий"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
