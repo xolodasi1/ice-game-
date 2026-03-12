@@ -62,7 +62,12 @@ service cloud.firestore {
              (!('logoUrl' in data) || data.logoUrl == "" || isValidUrl(data.logoUrl)) &&
              (!('previewUrl' in data) || data.previewUrl == "" || isValidUrl(data.previewUrl)) &&
              (!('likedBy' in data) || data.likedBy is list) &&
-             (!('dislikedBy' in data) || data.dislikedBy is list);
+             (!('dislikedBy' in data) || data.dislikedBy is list) &&
+             (!('screenshots' in data) || data.screenshots is list) &&
+             (!('systemRequirements' in data) || data.systemRequirements is map) &&
+             (!('ratings' in data) || data.ratings is list) &&
+             (!('versions' in data) || data.versions is list) &&
+             (!('developmentProgress' in data) || (data.developmentProgress is number && data.developmentProgress >= 0 && data.developmentProgress <= 100));
     }
 
     function isValidSettings(data) {
@@ -72,6 +77,7 @@ service cloud.firestore {
              (!('vkUrl' in data) || data.vkUrl == "" || isValidUrl(data.vkUrl)) &&
              (!('telegramUrl' in data) || data.telegramUrl == "" || isValidUrl(data.telegramUrl)) &&
              (!('youtubeUrl' in data) || data.youtubeUrl == "" || isValidUrl(data.youtubeUrl)) &&
+             (!('discordUrl' in data) || data.discordUrl == "" || isValidUrl(data.discordUrl)) &&
              (!('adminEmails' in data) || (data.adminEmails is list && data.adminEmails.size() > 0 && data.adminEmails.size() < 100));
     }
 
@@ -81,18 +87,74 @@ service cloud.firestore {
              data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 50 &&
              data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
              data.createdAt is number &&
-             (!('likedBy' in data) || data.likedBy is list);
+             (!('likedBy' in data) || data.likedBy is list) &&
+             (!('isDeveloper' in data) || data.isDeveloper is bool) &&
+             (!('type' in data) || data.type in ['comment', 'bug_report']) &&
+             (!('authorUid' in data) || data.authorUid is string);
     }
 
     function isValidNotification(data) {
       return hasRequiredFields(['type', 'message', 'read', 'createdAt']) &&
-             data.type in ['new_comment'] &&
+             data.type in ['new_comment', 'new_bug_report'] &&
              data.message is string && data.message.size() > 0 &&
              data.read is bool &&
              data.createdAt is number &&
              (!('gameId' in data) || data.gameId is string) &&
              (!('gameTitle' in data) || data.gameTitle is string) &&
              (!('authorName' in data) || data.authorName is string);
+    }
+
+    function isValidUserGameData(data) {
+      return hasRequiredFields(['userId', 'gameId']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             (!('isFavorite' in data) || data.isFavorite is bool) &&
+             (!('status' in data) || data.status in ['none', 'playing', 'completed', 'dropped']);
+    }
+
+    function isValidDailyStats(data) {
+      return hasRequiredFields(['date', 'downloads']) &&
+             data.date is string && data.date.size() > 0 &&
+             data.downloads is number && data.downloads >= 0;
+    }
+
+    function isValidAchievement(data) {
+      return hasRequiredFields(['userId', 'gameId', 'title', 'unlockedAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.unlockedAt is number &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
+             (!('iconUrl' in data) || data.iconUrl == "" || isValidUrl(data.iconUrl));
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return hasRequiredFields(['gameId', 'userId', 'userName', 'createdAt']) &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() <= 50 &&
+             data.createdAt is number &&
+             ((!('score' in data) || data.score is number) || (!('time' in data) || data.time is number));
+    }
+
+    function isValidMod(data) {
+      return hasRequiredFields(['gameId', 'authorUid', 'authorName', 'title', 'fileUrl', 'createdAt']) &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             data.authorUid is string && data.authorUid.size() > 0 &&
+             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 50 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             isValidUrl(data.fileUrl) &&
+             data.createdAt is number &&
+             (!('description' in data) || (data.description is string && data.description.size() < 5000)) &&
+             (!('downloads' in data) || (data.downloads is number && data.downloads >= 0));
+    }
+
+    function isValidDevLog(data) {
+      return hasRequiredFields(['title', 'content', 'createdAt', 'authorUid']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.createdAt is number &&
+             data.authorUid is string && data.authorUid.size() > 0;
     }
 
     function isOnlyIncrementingCommentStats() {
@@ -104,7 +166,7 @@ service cloud.firestore {
 
     function isOnlyIncrementingStats() {
       let diff = request.resource.data.diff(resource.data);
-      let allowedKeys = diff.affectedKeys().hasOnly(['views', 'downloads', 'likedBy', 'dislikedBy']);
+      let allowedKeys = diff.affectedKeys().hasOnly(['views', 'downloads', 'likedBy', 'dislikedBy', 'ratings']);
       
       let viewsValid = !diff.affectedKeys().hasAny(['views']) || 
                        (request.resource.data.views is number && request.resource.data.views == resource.data.views + 1);
@@ -112,7 +174,7 @@ service cloud.firestore {
       let downloadsValid = !diff.affectedKeys().hasAny(['downloads']) || 
                            (request.resource.data.downloads is number && request.resource.data.downloads == resource.data.downloads + 1);
                            
-      let votesValid = !diff.affectedKeys().hasAny(['likedBy', 'dislikedBy']) || isAuthenticated();
+      let votesValid = !diff.affectedKeys().hasAny(['likedBy', 'dislikedBy', 'ratings']) || isAuthenticated();
                            
       return allowedKeys && viewsValid && downloadsValid && votesValid;
     }
@@ -145,6 +207,48 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if isAuthenticated() && isValidNotification(request.resource.data);
       allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /userGameData/{dataId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidUserGameData(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidUserGameData(request.resource.data) && request.resource.data.userId == resource.data.userId && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /dailyStats/{statId} {
+      allow read: if isAdmin();
+      allow create: if true; // allow anyone to increment downloads
+      allow update: if true; // allow anyone to increment downloads
+      allow delete: if isAdmin();
+    }
+
+    match /achievements/{achievementId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidAchievement(request.resource.data);
+      allow update: if isAdmin() && isValidAchievement(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /leaderboards/{entryId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidLeaderboardEntry(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidLeaderboardEntry(request.resource.data) && request.resource.data.userId == resource.data.userId && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /mods/{modId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidMod(request.resource.data) && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAuthenticated() && isValidMod(request.resource.data) && request.resource.data.authorUid == resource.data.authorUid && resource.data.authorUid == request.auth.uid;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.authorUid == request.auth.uid);
+    }
+
+    match /devlogs/{logId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidDevLog(request.resource.data) && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin() && isValidDevLog(request.resource.data) && request.resource.data.authorUid == resource.data.authorUid;
       allow delete: if isAdmin();
     }
 

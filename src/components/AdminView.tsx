@@ -29,6 +29,16 @@ interface Game {
   previewUrl?: string;
   likedBy?: string[];
   dislikedBy?: string[];
+  screenshots?: string[];
+  systemRequirements?: {
+    os: string;
+    cpu: string;
+    ram: string;
+    gpu: string;
+    storage: string;
+  };
+  versions?: { version: string; fileUrl: string; createdAt: number }[];
+  developmentProgress?: number;
 }
 
 interface SiteSettings {
@@ -38,6 +48,7 @@ interface SiteSettings {
   vkUrl: string;
   telegramUrl: string;
   youtubeUrl: string;
+  discordUrl?: string;
   adminEmails?: string[];
 }
 
@@ -50,9 +61,9 @@ interface Comment {
   likedBy?: string[];
 }
 
-interface Notification {
+interface AppNotification {
   id: string;
-  type: 'new_comment';
+  type: 'new_comment' | 'new_bug_report';
   message: string;
   gameId?: string;
   gameTitle?: string;
@@ -87,9 +98,9 @@ export default function AdminView({ user }: AdminViewProps) {
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentSort, setCommentSort] = useState<'newest' | 'popular'>('newest');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [toast, setToast] = useState<Notification | null>(null);
+  const [toast, setToast] = useState<AppNotification | null>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -158,7 +169,7 @@ export default function AdminView({ user }: AdminViewProps) {
 
     const qNotifications = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
-      const notificationsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      const notificationsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
       
       // Check for new unread notifications to show toast
       const prevUnreadIds = notifications.filter(n => !n.read).map(n => n.id);
@@ -272,7 +283,12 @@ export default function AdminView({ user }: AdminViewProps) {
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingGame?.title || !editingGame?.fileUrl || !editingGame?.fileName) {
+    if (!user) {
+      setMessage({ type: 'error', text: 'Пользователь не авторизован.' });
+      return;
+    }
+    if (!editingGame) return;
+    if (!editingGame.title || !editingGame.fileUrl || !editingGame.fileName) {
       setMessage({ type: 'error', text: 'Заполните название, укажите ссылку на файл и его имя.' });
       return;
     }
@@ -297,7 +313,16 @@ export default function AdminView({ user }: AdminViewProps) {
         authorUid: user.uid,
         platform: editingGame.platform || 'pc',
         likedBy: isNew ? [] : (editingGame.likedBy || []),
-        dislikedBy: isNew ? [] : (editingGame.dislikedBy || [])
+        dislikedBy: isNew ? [] : (editingGame.dislikedBy || []),
+        screenshots: editingGame.screenshots || [],
+        systemRequirements: editingGame.systemRequirements || {
+          os: '',
+          cpu: '',
+          ram: '',
+          gpu: '',
+          storage: ''
+        },
+        versions: editingGame.versions || []
       };
 
       if (editingGame.logoUrl) gameData.logoUrl = editingGame.logoUrl;
@@ -425,7 +450,7 @@ export default function AdminView({ user }: AdminViewProps) {
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Settings className="w-5 h-5 text-cyan-400" />
-              ice_game Admin
+              ice_game Админ
             </h2>
             <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px] md:max-w-full">{user.email}</p>
           </div>
@@ -846,6 +871,16 @@ export default function AdminView({ user }: AdminViewProps) {
                       className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Discord (ссылка)</label>
+                    <input
+                      type="url"
+                      placeholder="https://discord.gg/..."
+                      value={settings.discordUrl || ''}
+                      onChange={e => setSettings({...settings, discordUrl: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-4 flex justify-end">
@@ -1238,6 +1273,178 @@ export default function AdminView({ user }: AdminViewProps) {
                   />
                 </div>
 
+                <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-cyan-400" /> Скриншоты
+                  </h3>
+                  <div className="space-y-3">
+                    {(editingGame?.screenshots || []).map((url, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://..."
+                          value={url}
+                          onChange={e => {
+                            const newScreenshots = [...(editingGame?.screenshots || [])];
+                            newScreenshots[index] = e.target.value;
+                            setEditingGame({...editingGame, screenshots: newScreenshots});
+                          }}
+                          className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newScreenshots = (editingGame?.screenshots || []).filter((_, i) => i !== index);
+                            setEditingGame({...editingGame, screenshots: newScreenshots});
+                          }}
+                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newScreenshots = [...(editingGame?.screenshots || []), ''];
+                        setEditingGame({...editingGame, screenshots: newScreenshots});
+                      }}
+                      className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-slate-500 hover:text-white hover:border-white/20 transition-all"
+                    >
+                      + Добавить скриншот
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-cyan-400" /> Системные требования
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ОС</label>
+                      <input
+                        type="text"
+                        placeholder="Windows 10/11"
+                        value={editingGame?.systemRequirements?.os || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), os: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Процессор</label>
+                      <input
+                        type="text"
+                        placeholder="Intel i5 / Ryzen 5"
+                        value={editingGame?.systemRequirements?.cpu || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), cpu: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ОЗУ</label>
+                      <input
+                        type="text"
+                        placeholder="8 GB"
+                        value={editingGame?.systemRequirements?.ram || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), ram: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Видеокарта</label>
+                      <input
+                        type="text"
+                        placeholder="GTX 1060 / RX 580"
+                        value={editingGame?.systemRequirements?.gpu || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), gpu: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Место на диске</label>
+                      <input
+                        type="text"
+                        placeholder="2 GB"
+                        value={editingGame?.systemRequirements?.storage || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), storage: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <History className="w-4 h-4 text-cyan-400" /> История версий
+                  </h3>
+                  <div className="space-y-3">
+                    {(editingGame?.versions || []).map((v, index) => (
+                      <div key={index} className="space-y-2 p-3 bg-black/40 border border-white/5 rounded-xl">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Версия (напр. 0.9.0)"
+                            value={v.version}
+                            onChange={e => {
+                              const newVersions = [...(editingGame?.versions || [])];
+                              newVersions[index] = { ...v, version: e.target.value };
+                              setEditingGame({...editingGame, versions: newVersions});
+                            }}
+                            className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                          <input
+                            type="url"
+                            placeholder="Ссылка на файл"
+                            value={v.fileUrl}
+                            onChange={e => {
+                              const newVersions = [...(editingGame?.versions || [])];
+                              newVersions[index] = { ...v, fileUrl: e.target.value };
+                              setEditingGame({...editingGame, versions: newVersions});
+                            }}
+                            className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newVersions = (editingGame?.versions || []).filter((_, i) => i !== index);
+                              setEditingGame({...editingGame, versions: newVersions});
+                            }}
+                            className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newVersions = [...(editingGame?.versions || []), { version: '', fileUrl: '', createdAt: Date.now() }];
+                        setEditingGame({...editingGame, versions: newVersions});
+                      }}
+                      className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-slate-500 hover:text-white hover:border-white/20 transition-all"
+                    >
+                      + Добавить старую версию
+                    </button>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Патчноут (Что нового)</label>
                   <textarea
@@ -1245,6 +1452,18 @@ export default function AdminView({ user }: AdminViewProps) {
                     value={editingGame?.releaseNotes || ''}
                     onChange={e => setEditingGame({...editingGame, releaseNotes: e.target.value})}
                     className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all resize-none font-mono text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">Прогресс разработки (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editingGame?.developmentProgress ?? 100}
+                    onChange={e => setEditingGame({...editingGame, developmentProgress: Number(e.target.value)})}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono text-sm"
                   />
                 </div>
               </form>

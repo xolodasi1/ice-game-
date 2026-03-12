@@ -16,8 +16,43 @@
         "createdAt": { "type": "number" },
         "authorUid": { "type": "string" },
         "platform": { "type": "string", "enum": ["pc", "android", "both"] },
+        "logoUrl": { "type": "string" },
+        "previewUrl": { "type": "string" },
+        "screenshots": { "type": "array", "items": { "type": "string" } },
+        "systemRequirements": {
+          "type": "object",
+          "properties": {
+            "os": { "type": "string" },
+            "cpu": { "type": "string" },
+            "ram": { "type": "string" },
+            "gpu": { "type": "string" },
+            "storage": { "type": "string" }
+          }
+        },
+        "ratings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "score": { "type": "number" }
+            }
+          }
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": { "type": "string" },
+              "fileUrl": { "type": "string" },
+              "createdAt": { "type": "number" }
+            }
+          }
+        },
         "likedBy": { "type": "array", "items": { "type": "string" } },
-        "dislikedBy": { "type": "array", "items": { "type": "string" } }
+        "dislikedBy": { "type": "array", "items": { "type": "string" } },
+        "developmentProgress": { "type": "number" }
       },
       "required": ["title", "fileUrl", "views", "downloads", "createdAt", "authorUid", "platform"]
     },
@@ -28,17 +63,43 @@
       "properties": {
         "gameId": { "type": "string" },
         "authorName": { "type": "string" },
+        "authorUid": { "type": "string" },
         "text": { "type": "string" },
-        "createdAt": { "type": "number" }
+        "createdAt": { "type": "number" },
+        "isDeveloper": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["comment", "bug_report"] },
+        "likedBy": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["gameId", "authorName", "text", "createdAt"]
+    },
+    "UserGameData": {
+      "title": "UserGameData",
+      "description": "User specific data for a game (wishlist, status)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gameId": { "type": "string" },
+        "isFavorite": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["none", "playing", "completed", "dropped"] }
+      },
+      "required": ["userId", "gameId"]
+    },
+    "DailyStats": {
+      "title": "DailyStats",
+      "description": "Daily download statistics",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "downloads": { "type": "number" }
+      },
+      "required": ["date", "downloads"]
     },
     "Notification": {
       "title": "Notification",
       "description": "A notification for the admin",
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["new_comment"] },
+        "type": { "type": "string", "enum": ["new_comment", "new_bug_report"] },
         "message": { "type": "string" },
         "gameId": { "type": "string" },
         "gameTitle": { "type": "string" },
@@ -47,6 +108,62 @@
         "createdAt": { "type": "number" }
       },
       "required": ["type", "message", "read", "createdAt"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "An achievement unlocked by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gameId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "iconUrl": { "type": "string" },
+        "unlockedAt": { "type": "number" }
+      },
+      "required": ["userId", "gameId", "title", "unlockedAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "A score or time entry for a game leaderboard",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "score": { "type": "number" },
+        "time": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["gameId", "userId", "userName", "createdAt"]
+    },
+    "Mod": {
+      "title": "Mod",
+      "description": "A user-uploaded mod or asset for a game",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "downloads": { "type": "number" }
+      },
+      "required": ["gameId", "authorUid", "authorName", "title", "fileUrl", "createdAt"]
+    },
+    "DevLog": {
+      "title": "DevLog",
+      "description": "A short post from the developer",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "authorUid": { "type": "string" }
+      },
+      "required": ["title", "content", "createdAt", "authorUid"]
     }
   },
   "firestore": {
@@ -58,9 +175,33 @@
       "schema": { "$ref": "#/entities/Comment" },
       "description": "Stores all comments for games"
     },
+    "userGameData/{dataId}": {
+      "schema": { "$ref": "#/entities/UserGameData" },
+      "description": "Stores user specific game data"
+    },
+    "dailyStats/{statId}": {
+      "schema": { "$ref": "#/entities/DailyStats" },
+      "description": "Stores daily download stats"
+    },
     "notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/Notification" },
       "description": "Stores notifications for admin"
+    },
+    "achievements/{achievementId}": {
+      "schema": { "$ref": "#/entities/Achievement" },
+      "description": "Stores user achievements"
+    },
+    "leaderboards/{entryId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Stores leaderboard entries"
+    },
+    "mods/{modId}": {
+      "schema": { "$ref": "#/entities/Mod" },
+      "description": "Stores user uploaded mods"
+    },
+    "devlogs/{logId}": {
+      "schema": { "$ref": "#/entities/DevLog" },
+      "description": "Stores developer logs"
     }
   }
 }
