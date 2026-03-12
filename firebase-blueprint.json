@@ -18,6 +18,9 @@
         "platform": { "type": "string", "enum": ["pc", "android", "both"] },
         "logoUrl": { "type": "string" },
         "previewUrl": { "type": "string" },
+        "trailerUrl": { "type": "string" },
+        "genre": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
         "screenshots": { "type": "array", "items": { "type": "string" } },
         "systemRequirements": {
           "type": "object",
@@ -26,6 +29,14 @@
             "cpu": { "type": "string" },
             "ram": { "type": "string" },
             "gpu": { "type": "string" },
+            "storage": { "type": "string" }
+          }
+        },
+        "androidSystemRequirements": {
+          "type": "object",
+          "properties": {
+            "os": { "type": "string" },
+            "ram": { "type": "string" },
             "storage": { "type": "string" }
           }
         },
@@ -164,6 +175,32 @@
         "authorUid": { "type": "string" }
       },
       "required": ["title", "content", "createdAt", "authorUid"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "lastSeen": { "type": "number" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "BugReport": {
+      "title": "BugReport",
+      "description": "A bug report from a user",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "systemData": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["gameId", "userId", "description", "createdAt"]
     }
   },
   "firestore": {
@@ -202,6 +239,14 @@
     "devlogs/{logId}": {
       "schema": { "$ref": "#/entities/DevLog" },
       "description": "Stores developer logs"
+    },
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles"
+    },
+    "bugReports/{reportId}": {
+      "schema": { "$ref": "#/entities/BugReport" },
+      "description": "Stores bug reports"
     }
   }
 }

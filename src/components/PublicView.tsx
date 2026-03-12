@@ -3,7 +3,8 @@ import { collection, doc, getDocs, updateDoc, increment, query, orderBy, addDoc,
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
-import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor, MessageSquare, Send, ThumbsUp, ThumbsDown, LogIn, LogOut, Bell, Star, X, Settings, BellRing, Trash, Heart, Bug, Share2, ExternalLink, History, Cpu, HardDrive, Database, Layers, Terminal, Wrench, Plus, Trophy, User } from 'lucide-react';
+import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor, MessageSquare, Send, ThumbsUp, ThumbsDown, LogIn, LogOut, Bell, Star, X, Settings, BellRing, Trash, Heart, Bug, Share2, ExternalLink, Cpu, HardDrive, Database, Layers, Terminal, Wrench, Plus, Trophy, User } from 'lucide-react';
+import { MediaSlider } from './MediaSlider';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -14,34 +15,7 @@ interface SystemEvent {
   type: 'info' | 'success' | 'warning' | 'error';
 }
 
-interface Game {
-  id: string;
-  title: string;
-  description: string;
-  version: string;
-  fileUrl: string;
-  fileName: string;
-  releaseNotes: string;
-  views: number;
-  downloads: number;
-  createdAt: number;
-  platform: 'pc' | 'android' | 'both';
-  logoUrl?: string;
-  previewUrl?: string;
-  likedBy?: string[];
-  dislikedBy?: string[];
-  screenshots?: string[];
-  systemRequirements?: {
-    os: string;
-    cpu: string;
-    ram: string;
-    gpu: string;
-    storage: string;
-  };
-  ratings?: { userId: string; score: number }[];
-  versions?: { version: string; fileUrl: string; createdAt: number }[];
-  developmentProgress?: number;
-}
+import { Game } from '../types';
 
 interface UserGameData {
   id: string;
@@ -533,6 +507,10 @@ export default function PublicView() {
   };
 
   const handleDownload = async (game: Game) => {
+    if (!user) {
+      addSystemEvent('Для скачивания игры необходимо войти в систему.', 'error');
+      return;
+    }
     try {
       await updateDoc(doc(db, 'games', game.id), {
         downloads: increment(1)
@@ -1170,6 +1148,15 @@ export default function PublicView() {
                   {selectedGame.description}
                 </p>
 
+                {selectedGame.changelog && (
+                  <div className="mt-8 p-6 bg-zinc-900/40 border border-white/5">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-[#00F0FF] mb-4">Список изменений</h3>
+                    <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed font-medium">
+                      {selectedGame.changelog}
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <div className="flex flex-col gap-2">
                     <button 
@@ -1250,29 +1237,14 @@ export default function PublicView() {
               </div>
             </div>
 
-            {/* Screenshots Gallery */}
-            {selectedGame.screenshots && selectedGame.screenshots.length > 0 && (
+            {/* Media Gallery */}
+            {( (selectedGame.screenshots && selectedGame.screenshots.length > 0) || selectedGame.trailerUrl ) && (
               <div className="mt-20 pt-16 border-t border-white/5">
                 <h2 className="text-2xl font-black text-white mb-8 flex items-center gap-3 uppercase tracking-widest italic">
                   <Eye className="w-6 h-6 text-[#00F0FF]" />
-                  Скриншоты
+                  Медиа
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {selectedGame.screenshots.map((url, i) => (
-                    <motion.div 
-                      key={i}
-                      whileHover={{ scale: 1.05 }}
-                      className="aspect-video bg-zinc-900 border border-white/5 overflow-hidden cursor-pointer group"
-                    >
-                      <img 
-                        src={url} 
-                        alt={`Screenshot ${i + 1}`} 
-                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                        referrerPolicy="no-referrer"
-                      />
-                    </motion.div>
-                  ))}
-                </div>
+                <MediaSlider screenshots={selectedGame.screenshots || []} trailerUrl={selectedGame.trailerUrl} />
               </div>
             )}
 

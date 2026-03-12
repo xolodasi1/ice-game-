@@ -3,7 +3,8 @@ import { User, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, getDocs, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users, MessageSquare, ThumbsUp, TrendingUp, Bell, BellRing, Check, Trash } from 'lucide-react';
+import * as firebaseService from '../services/firebaseService';
+import { LogOut, Save, Loader2, Download, Eye, Settings, Plus, Edit3, Trash2, AlertCircle, CheckCircle2, UploadCloud, X, BarChart2, Smartphone, Monitor, Users, MessageSquare, ThumbsUp, TrendingUp, Bell, BellRing, Check, Trash, History } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,34 +13,7 @@ interface AdminViewProps {
   user: User;
 }
 
-interface Game {
-  id: string;
-  title: string;
-  description: string;
-  version: string;
-  fileUrl: string;
-  fileName: string;
-  releaseNotes: string;
-  views: number;
-  downloads: number;
-  createdAt: number;
-  authorUid: string;
-  platform: 'pc' | 'android' | 'both';
-  logoUrl?: string;
-  previewUrl?: string;
-  likedBy?: string[];
-  dislikedBy?: string[];
-  screenshots?: string[];
-  systemRequirements?: {
-    os: string;
-    cpu: string;
-    ram: string;
-    gpu: string;
-    storage: string;
-  };
-  versions?: { version: string; fileUrl: string; createdAt: number }[];
-  developmentProgress?: number;
-}
+import { Game } from '../types';
 
 interface SiteSettings {
   siteName: string;
@@ -95,6 +69,10 @@ export default function AdminView({ user }: AdminViewProps) {
   
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [changelog, setChangelog] = useState('');
+  const [fileSize, setFileSize] = useState(0);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentSort, setCommentSort] = useState<'newest' | 'popular'>('newest');
@@ -110,6 +88,14 @@ export default function AdminView({ user }: AdminViewProps) {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  useEffect(() => {
+    if (editingGame) {
+      setChangelog(editingGame.changelog || '');
+    } else {
+      setChangelog('');
+    }
+  }, [editingGame]);
 
   const sortedComments = [...comments].sort((a, b) => {
     if (commentSort === 'popular') {
@@ -288,8 +274,8 @@ export default function AdminView({ user }: AdminViewProps) {
       return;
     }
     if (!editingGame) return;
-    if (!editingGame.title || !editingGame.fileUrl || !editingGame.fileName) {
-      setMessage({ type: 'error', text: 'Заполните название, укажите ссылку на файл и его имя.' });
+    if (!editingGame.title || (!editingGame.fileUrl && !file) || !editingGame.fileName) {
+      setMessage({ type: 'error', text: 'Заполните название, укажите файл или ссылку на него и его имя.' });
       return;
     }
 
@@ -298,13 +284,38 @@ export default function AdminView({ user }: AdminViewProps) {
     
     try {
       const isNew = !editingGame.id;
-      const gameId = editingGame.id || doc(collection(db, 'games')).id;
       
+      let fileUrl = editingGame.fileUrl || '';
+      let finalFileSize = editingGame.fileSize || 0;
+
+      if (file) {
+        setUploading(true);
+        const storageRef = ref(storage, `games/${Date.now()}_${file.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+        
+        await new Promise((resolve, reject) => {
+          (uploadTask.on as any)('state_changed', 
+            (snapshot: any) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            }, 
+            reject, 
+            resolve
+          );
+        });
+        
+        fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        finalFileSize = file.size;
+        setUploading(false);
+      }
+
       const gameData: any = {
         title: editingGame.title,
         description: editingGame.description || '',
         version: editingGame.version || '1.0.0',
-        fileUrl: editingGame.fileUrl,
+        fileUrl: fileUrl,
+        fileSize: finalFileSize,
+        changelog: changelog || editingGame.changelog || '',
         fileName: editingGame.fileName || 'game.zip',
         releaseNotes: editingGame.releaseNotes || '',
         views: isNew ? 0 : editingGame.views,
@@ -322,21 +333,37 @@ export default function AdminView({ user }: AdminViewProps) {
           gpu: '',
           storage: ''
         },
-        versions: editingGame.versions || []
+        androidSystemRequirements: editingGame.androidSystemRequirements || {
+          os: '',
+          ram: '',
+          storage: ''
+        },
+        versions: editingGame.versions || [],
+        trailerUrl: editingGame.trailerUrl || '',
+        genre: editingGame.genre || '',
+        tags: editingGame.tags || []
       };
 
       if (editingGame.logoUrl) gameData.logoUrl = editingGame.logoUrl;
       if (editingGame.previewUrl) gameData.previewUrl = editingGame.previewUrl;
 
-      await setDoc(doc(db, 'games', gameId), gameData);
+      if (isNew) {
+        await firebaseService.addGame(gameData);
+      } else {
+        await firebaseService.updateGame(editingGame.id, gameData);
+      }
+      
       setMessage({ type: 'success', text: 'Игра успешно сохранена!' });
       setIsModalOpen(false);
+      setFile(null);
+      setChangelog('');
       setTimeout(() => setMessage(null), 3000);
     } catch (err: any) {
       console.error("Save error:", err);
       setMessage({ type: 'error', text: 'Ошибка при сохранении: ' + err.message });
     } finally {
       setSaving(false);
+      setUploading(false);
     }
   };
 
@@ -1081,7 +1108,7 @@ export default function AdminView({ user }: AdminViewProps) {
                   <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                     <Eye className="w-5 h-5 text-cyan-400" /> Топ по просмотрам
                   </h3>
-                  <div className="h-[300px] w-full">
+                  <div className="h-[300px] w-full min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={[...games].sort((a, b) => b.views - a.views).slice(0, 5)}
@@ -1116,7 +1143,7 @@ export default function AdminView({ user }: AdminViewProps) {
                   <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                     <Download className="w-5 h-5 text-emerald-400" /> Топ по скачиваниям
                   </h3>
-                  <div className="h-[300px] w-full">
+                  <div className="h-[300px] w-full min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={[...games].sort((a, b) => b.downloads - a.downloads).slice(0, 5)}
@@ -1238,15 +1265,18 @@ export default function AdminView({ user }: AdminViewProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs text-slate-500">Ссылка на скачивание файла</label>
+                    <label className="text-xs text-slate-500">Файл игры (загрузка в Firebase Storage)</label>
                     <input
-                      type="url"
-                      required
-                      placeholder="https://github.com/user/repo/releases/download/..."
-                      value={editingGame?.fileUrl || ''}
-                      onChange={e => setEditingGame({...editingGame, fileUrl: e.target.value})}
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all text-sm"
+                      type="file"
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          setFile(e.target.files[0]);
+                          setFileSize(e.target.files[0].size);
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-slate-950 hover:file:bg-cyan-600"
                     />
+                    {uploading && <p className="text-xs text-cyan-400">Загрузка: {uploadProgress}%</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -1260,6 +1290,17 @@ export default function AdminView({ user }: AdminViewProps) {
                       className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all text-sm"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">Список изменений (changelog)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Исправлен баг с камерой..."
+                    value={changelog}
+                    onChange={e => setChangelog(e.target.value)}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all resize-none"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -1318,7 +1359,7 @@ export default function AdminView({ user }: AdminViewProps) {
 
                 <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Monitor className="w-4 h-4 text-cyan-400" /> Системные требования
+                    <Monitor className="w-4 h-4 text-cyan-400" /> Системные требования (PC)
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -1382,6 +1423,53 @@ export default function AdminView({ user }: AdminViewProps) {
                         onChange={e => setEditingGame({
                           ...editingGame, 
                           systemRequirements: { ...(editingGame?.systemRequirements || {os:'', cpu:'', ram:'', gpu:'', storage:''}), storage: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-cyan-400" /> Системные требования (Android)
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ОС</label>
+                      <input
+                        type="text"
+                        placeholder="Android 10+"
+                        value={editingGame?.androidSystemRequirements?.os || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          androidSystemRequirements: { ...(editingGame?.androidSystemRequirements || {os:'', ram:'', storage:''}), os: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ОЗУ</label>
+                      <input
+                        type="text"
+                        placeholder="4 GB"
+                        value={editingGame?.androidSystemRequirements?.ram || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          androidSystemRequirements: { ...(editingGame?.androidSystemRequirements || {os:'', ram:'', storage:''}), ram: e.target.value }
+                        })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Место на диске</label>
+                      <input
+                        type="text"
+                        placeholder="2 GB"
+                        value={editingGame?.androidSystemRequirements?.storage || ''}
+                        onChange={e => setEditingGame({
+                          ...editingGame, 
+                          androidSystemRequirements: { ...(editingGame?.androidSystemRequirements || {os:'', ram:'', storage:''}), storage: e.target.value }
                         })}
                         className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
