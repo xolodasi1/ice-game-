@@ -76,6 +76,7 @@ export default function AdminView({ user }: AdminViewProps) {
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentSort, setCommentSort] = useState<'newest' | 'popular'>('newest');
+  const [gameSort, setGameSort] = useState<'newest' | 'popularity' | 'downloads' | 'views'>('newest');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [toast, setToast] = useState<AppNotification | null>(null);
@@ -470,14 +471,18 @@ export default function AdminView({ user }: AdminViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col md:flex-row">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans flex flex-col md:flex-row relative overflow-hidden">
+      {/* Graphical Enhancements */}
+      <div className="scanline" />
+      <div className="fixed inset-0 cyber-grid opacity-10 pointer-events-none" />
+      
       {/* Sidebar */}
-      <aside className="w-full md:w-64 md:min-h-screen border-b md:border-b-0 md:border-r border-cyan-500/10 bg-slate-900/50 flex flex-col shrink-0">
-        <div className="p-4 md:p-6 border-b border-cyan-500/10 flex justify-between items-center md:block">
+      <aside className="w-full md:w-72 md:min-h-screen border-b md:border-b-0 md:border-r border-white/5 glass-panel flex flex-col shrink-0 z-10">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center md:block">
           <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Settings className="w-5 h-5 text-cyan-400" />
-              ice_game Админ
+            <h2 className="text-2xl font-black text-white flex items-center gap-3 uppercase tracking-tighter italic">
+              <Settings className="w-6 h-6 text-[#00F0FF]" />
+              {settings.siteName} <span className="text-[#00F0FF]">Admin</span>
             </h2>
             <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px] md:max-w-full">{user.email}</p>
           </div>
@@ -493,64 +498,70 @@ export default function AdminView({ user }: AdminViewProps) {
         <nav className="flex md:flex-col p-2 md:p-4 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('games')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-3 transition-all text-[10px] font-black uppercase tracking-widest whitespace-nowrap relative group ${
               activeTab === 'games' 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                ? 'text-[#00F0FF]' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            <BarChart2 className="w-5 h-5" />
-            <span className="hidden sm:inline md:inline">Управление играми</span>
-            <span className="sm:hidden">Игры</span>
+            {activeTab === 'games' && <motion.div layoutId="activeTabAdmin" className="absolute inset-0 bg-[#00F0FF]/10 border-r-2 border-[#00F0FF]" />}
+            <BarChart2 className="w-4 h-4 relative z-10" />
+            <span className="hidden sm:inline md:inline relative z-10">Управление играми</span>
+            <span className="sm:hidden relative z-10">Игры</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-3 transition-all text-[10px] font-black uppercase tracking-widest whitespace-nowrap relative group ${
               activeTab === 'settings' 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                ? 'text-[#00F0FF]' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            <Settings className="w-5 h-5" />
-            <span className="hidden sm:inline md:inline">Настройки сайта</span>
-            <span className="sm:hidden">Настройки</span>
+            {activeTab === 'settings' && <motion.div layoutId="activeTabAdmin" className="absolute inset-0 bg-[#00F0FF]/10 border-r-2 border-[#00F0FF]" />}
+            <Settings className="w-4 h-4 relative z-10" />
+            <span className="hidden sm:inline md:inline relative z-10">Настройки сайта</span>
+            <span className="sm:hidden relative z-10">Настройки</span>
           </button>
           <button
             onClick={() => setActiveTab('admins')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-3 transition-all text-[10px] font-black uppercase tracking-widest whitespace-nowrap relative group ${
               activeTab === 'admins' 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                ? 'text-[#00F0FF]' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            <Users className="w-5 h-5" />
-            <span className="hidden sm:inline md:inline">Администраторы</span>
-            <span className="sm:hidden">Админы</span>
+            {activeTab === 'admins' && <motion.div layoutId="activeTabAdmin" className="absolute inset-0 bg-[#00F0FF]/10 border-r-2 border-[#00F0FF]" />}
+            <Users className="w-4 h-4 relative z-10" />
+            <span className="hidden sm:inline md:inline relative z-10">Администраторы</span>
+            <span className="sm:hidden relative z-10">Админы</span>
           </button>
           <button
             onClick={() => setActiveTab('comments')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-3 transition-all text-[10px] font-black uppercase tracking-widest whitespace-nowrap relative group ${
               activeTab === 'comments' 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                ? 'text-[#00F0FF]' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            <MessageSquare className="w-5 h-5" />
-            <span className="hidden sm:inline md:inline">Комментарии</span>
-            <span className="sm:hidden">Комменты</span>
+            {activeTab === 'comments' && <motion.div layoutId="activeTabAdmin" className="absolute inset-0 bg-[#00F0FF]/10 border-r-2 border-[#00F0FF]" />}
+            <MessageSquare className="w-4 h-4 relative z-10" />
+            <span className="hidden sm:inline md:inline relative z-10">Комментарии</span>
+            <span className="sm:hidden relative z-10">Комменты</span>
           </button>
           <button
             onClick={() => setActiveTab('stats')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl transition-colors text-sm font-medium whitespace-nowrap ${
+            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-3 transition-all text-[10px] font-black uppercase tracking-widest whitespace-nowrap relative group ${
               activeTab === 'stats' 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                ? 'text-[#00F0FF]' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            <TrendingUp className="w-5 h-5" />
-            <span className="hidden sm:inline md:inline">Топы и Статистика</span>
-            <span className="sm:hidden">Топы</span>
+            {activeTab === 'stats' && <motion.div layoutId="activeTabAdmin" className="absolute inset-0 bg-[#00F0FF]/10 border-r-2 border-[#00F0FF]" />}
+            <TrendingUp className="w-4 h-4 relative z-10" />
+            <span className="hidden sm:inline md:inline relative z-10">Топы и Статистика</span>
+            <span className="sm:hidden relative z-10">Топы</span>
           </button>
+        </nav>
           
           <div className="relative md:w-full">
             <button
@@ -663,7 +674,6 @@ export default function AdminView({ user }: AdminViewProps) {
               )}
             </AnimatePresence>
           </div>
-        </nav>
 
         <div className="hidden md:block p-4 border-t border-cyan-500/10 mt-auto">
           <button
@@ -677,24 +687,24 @@ export default function AdminView({ user }: AdminViewProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative w-full">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12 relative w-full z-10">
         <AnimatePresence>
           {toast && (
             <motion.div 
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 100, scale: 0.9 }}
-              className="fixed top-6 right-6 z-[100] w-80 bg-slate-900 border border-cyan-500/30 rounded-2xl shadow-[0_10px_40px_rgba(6,182,212,0.2)] p-4 backdrop-blur-xl overflow-hidden group"
+              className="fixed top-6 right-6 z-[100] w-80 glass-panel border border-[#00F0FF]/30 shadow-[0_0_30px_rgba(0,240,255,0.2)] p-4 backdrop-blur-xl overflow-hidden group"
             >
-              <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+              <div className="absolute top-0 left-0 w-1 h-full bg-[#00F0FF]"></div>
               <div className="flex gap-4">
-                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0">
+                <div className="w-10 h-10 bg-[#00F0FF]/20 rounded-lg flex items-center justify-center text-[#00F0FF] shrink-0">
                   <BellRing className="w-5 h-5 animate-pulse" />
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-1">
-                    <h4 className="text-xs font-black text-cyan-400 uppercase tracking-widest">Новое уведомление</h4>
-                    <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white transition-colors">
+                    <h4 className="text-[10px] font-black text-[#00F0FF] uppercase tracking-widest">Системное уведомление</h4>
+                    <button onClick={() => setToast(null)} className="text-zinc-500 hover:text-white transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -738,13 +748,13 @@ export default function AdminView({ user }: AdminViewProps) {
             <>
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h1 className="text-3xl font-bold text-white mb-2">Ваши игры</h1>
-                  <p className="text-slate-400">Управляйте каталогом игр и отслеживайте статистику.</p>
+                  <h1 className="text-4xl font-black text-white mb-2 uppercase tracking-tighter italic text-glitch" data-text="Ваши игры">Ваши <span className="text-[#00F0FF]">игры</span></h1>
+                  <p className="text-zinc-500 font-medium">Управляйте каталогом игр и отслеживайте статистику.</p>
                 </div>
                 <div className="flex gap-4">
                   <button
                     onClick={() => window.open('/', '_blank')}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors border border-white/10"
+                    className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10"
                   >
                     На сайт
                   </button>
@@ -753,7 +763,7 @@ export default function AdminView({ user }: AdminViewProps) {
                       setEditingGame({});
                       setIsModalOpen(true);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-xl text-sm font-bold transition-colors"
+                    className="flex items-center gap-2 px-6 py-2 bg-[#00F0FF] hover:bg-[#00F0FF]/80 text-zinc-950 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)]"
                   >
                     <Plus className="w-4 h-4" />
                     Добавить игру
@@ -761,30 +771,61 @@ export default function AdminView({ user }: AdminViewProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {games.map(game => (
-                  <div key={game.id} className="bg-slate-900 border border-cyan-500/10 rounded-3xl p-6 flex flex-col">
+              <div className="flex justify-end mb-6">
+                <select
+                  value={gameSort}
+                  onChange={(e) => setGameSort(e.target.value as any)}
+                  className="bg-zinc-900 border border-white/10 text-zinc-300 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg focus:outline-none focus:border-[#00F0FF] transition-all"
+                >
+                  <option value="newest">Сначала новые</option>
+                  <option value="popularity">По популярности</option>
+                  <option value="downloads">По скачиваниям</option>
+                  <option value="views">По просмотрам</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {[...games].sort((a, b) => {
+                  if (gameSort === 'newest') return (b.createdAt || 0) - (a.createdAt || 0);
+                  if (gameSort === 'popularity') {
+                    const scoreA = (a.downloads || 0) * 5 + (a.views || 0);
+                    const scoreB = (b.downloads || 0) * 5 + (b.views || 0);
+                    return scoreB - scoreA;
+                  }
+                  if (gameSort === 'downloads') return (b.downloads || 0) - (a.downloads || 0);
+                  if (gameSort === 'views') return (b.views || 0) - (a.views || 0);
+                  return 0;
+                }).map((game, index) => (
+                  <motion.div 
+                    key={game.id} 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="bento-card p-6 flex flex-col group hover:border-[#00F0FF]/40 transition-all relative overflow-hidden rounded-2xl"
+                  >
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#00F0FF] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute -inset-1 bg-gradient-to-r from-[#00F0FF]/0 via-[#00F0FF]/5 to-[#00F0FF]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
                     <div className="flex justify-between items-start mb-1">
-                      <h3 className="text-xl font-bold text-white">{game.title}</h3>
-                      <div className="flex gap-1 text-cyan-500/50">
+                      <h3 className="text-xl font-black text-white uppercase tracking-tight">{game.title}</h3>
+                      <div className="flex gap-1 text-[#00F0FF]">
                         {(game.platform === 'pc' || game.platform === 'both') && <Monitor className="w-4 h-4" />}
                         {(game.platform === 'android' || game.platform === 'both') && <Smartphone className="w-4 h-4" />}
                       </div>
                     </div>
-                    <p className="text-sm text-cyan-400 mb-4">v{game.version}</p>
+                    <p className="text-[10px] font-black text-[#00F0FF] mb-4 uppercase tracking-widest">v{game.version}</p>
                     
                     <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
-                        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                      <div className="bg-black/40 rounded-lg p-3 border border-white/5">
+                        <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-1">
                           <Download className="w-3 h-3" /> Скачивания
                         </div>
-                        <div className="text-xl font-semibold text-white">{game.downloads}</div>
+                        <div className="text-xl font-black text-white">{game.downloads}</div>
                       </div>
-                      <div className="bg-slate-950 rounded-xl p-3 border border-white/5">
-                        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                      <div className="bg-black/40 rounded-lg p-3 border border-white/5">
+                        <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-1">
                           <Eye className="w-3 h-3" /> Просмотры
                         </div>
-                        <div className="text-xl font-semibold text-white">{game.views}</div>
+                        <div className="text-xl font-black text-white">{game.views}</div>
                       </div>
                     </div>
 
@@ -805,7 +846,7 @@ export default function AdminView({ user }: AdminViewProps) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
                 {games.length === 0 && (
                   <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-3xl">
@@ -1243,17 +1284,52 @@ export default function AdminView({ user }: AdminViewProps) {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Платформа</label>
+                    <select
+                      value={editingGame?.platform || 'pc'}
+                      onChange={e => setEditingGame({...editingGame, platform: e.target.value as any})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all appearance-none"
+                    >
+                      <option value="pc">PC (Windows/Mac/Linux)</option>
+                      <option value="android">Android</option>
+                      <option value="both">PC & Android</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Жанр</label>
+                    <select
+                      value={editingGame?.genre || ''}
+                      onChange={e => setEditingGame({...editingGame, genre: e.target.value})}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all appearance-none"
+                    >
+                      <option value="">Выберите жанр</option>
+                      <option value="RPG">RPG</option>
+                      <option value="Horror">Horror</option>
+                      <option value="Simulator">Simulator</option>
+                      <option value="Action">Action</option>
+                      <option value="Adventure">Adventure</option>
+                      <option value="Strategy">Strategy</option>
+                      <option value="Puzzle">Puzzle</option>
+                      <option value="Shooter">Shooter</option>
+                      <option value="Platformer">Platformer</option>
+                      <option value="Racing">Racing</option>
+                      <option value="Fighting">Fighting</option>
+                      <option value="Survival">Survival</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Платформа</label>
-                  <select
-                    value={editingGame?.platform || 'pc'}
-                    onChange={e => setEditingGame({...editingGame, platform: e.target.value as any})}
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all appearance-none"
-                  >
-                    <option value="pc">PC (Windows/Mac/Linux)</option>
-                    <option value="android">Android</option>
-                    <option value="both">PC & Android</option>
-                  </select>
+                  <label className="text-sm font-medium text-slate-400">Теги (через запятую)</label>
+                  <input
+                    type="text"
+                    placeholder="Indie, Pixel Art, Hardcore..."
+                    value={editingGame?.tags?.join(', ') || ''}
+                    onChange={e => setEditingGame({...editingGame, tags: e.target.value.split(',').map(t => t.trim()).filter(t => t !== '')})}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                  />
                 </div>
 
                 <div className="space-y-4 p-5 border border-white/5 rounded-2xl bg-slate-900/50">

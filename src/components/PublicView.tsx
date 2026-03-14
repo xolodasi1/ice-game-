@@ -6,7 +6,7 @@ import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { Download, Gamepad2, Info, Loader2, Snowflake, Eye, ChevronLeft, Smartphone, Monitor, MessageSquare, Send, ThumbsUp, ThumbsDown, LogIn, LogOut, Bell, Star, X, Settings, BellRing, Trash, Heart, Bug, Share2, ExternalLink, Cpu, HardDrive, Database, Layers, Terminal, Wrench, Plus, Trophy, User } from 'lucide-react';
 import { MediaSlider } from './MediaSlider';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useScroll } from 'motion/react';
 
 interface SystemEvent {
   id: string;
@@ -129,7 +129,103 @@ const Snowfall = () => {
   );
 };
 
+const CustomCursor = () => {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isHovering, setIsHovering] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'BUTTON' || target.tagName === 'A' || target.closest('.cursor-pointer')) {
+        setIsHovering(true);
+      } else {
+        setIsHovering(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseover', handleMouseOver);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseover', handleMouseOver);
+    };
+  }, []);
+
+  return (
+    <>
+      <motion.div 
+        className="custom-cursor hidden md:block"
+        animate={{ 
+          x: mousePos.x - 10, 
+          y: mousePos.y - 10,
+          scale: isHovering ? 2.5 : 1,
+          borderColor: isHovering ? 'rgba(0, 240, 255, 0.8)' : 'rgba(0, 240, 255, 0.5)'
+        }}
+        transition={{ type: 'spring', damping: 30, stiffness: 200, mass: 0.5 }}
+      />
+      <motion.div 
+        className="custom-cursor-dot hidden md:block"
+        animate={{ 
+          x: mousePos.x - 2, 
+          y: mousePos.y - 2,
+          scale: isHovering ? 0 : 1
+        }}
+        transition={{ type: 'spring', damping: 40, stiffness: 400, mass: 0.2 }}
+      />
+    </>
+  );
+};
+
+const NoiseOverlay = () => <div className="noise-overlay" />;
+
+const CyberLoading = () => (
+  <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center overflow-hidden">
+    <div className="scanline" />
+    <div className="cyber-grid absolute inset-0 opacity-20" />
+    
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative"
+    >
+      <div className="w-24 h-24 border-2 border-[#00F0FF]/20 rounded-full animate-spin-slow" />
+      <div className="absolute inset-0 w-24 h-24 border-t-2 border-[#00F0FF] rounded-full animate-spin" />
+      <Snowflake className="absolute inset-0 m-auto w-10 h-10 text-[#00F0FF] animate-pulse" />
+    </motion.div>
+    
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="mt-8 text-center"
+    >
+      <div className="text-[#00F0FF] font-black uppercase tracking-[0.5em] text-sm mb-2 animate-pulse">
+        Initializing System
+      </div>
+      <div className="flex gap-1 justify-center">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
+            className="w-1 h-1 bg-[#00F0FF]"
+          />
+        ))}
+      </div>
+    </motion.div>
+
+    {/* Decorative corner elements */}
+    <div className="absolute top-10 left-10 w-20 h-20 border-t-2 border-l-2 border-[#00F0FF]/20" />
+    <div className="absolute bottom-10 right-10 w-20 h-20 border-b-2 border-r-2 border-[#00F0FF]/20" />
+  </div>
+);
+
 export default function PublicView() {
+  const { scrollYProgress } = useScroll();
   const [games, setGames] = useState<Game[]>([]);
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: 'ice_game',
@@ -143,6 +239,9 @@ export default function PublicView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pc' | 'android'>('all');
+  const [genreFilter, setGenreFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'popularity' | 'downloads' | 'views'>('newest');
   
   const [comments, setComments] = useState<Comment[]>([]);
   const [newCommentName, setNewCommentName] = useState('');
@@ -618,34 +717,47 @@ export default function PublicView() {
   });
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-zinc-700 border-t-transparent rounded-full animate-spin"></div>
-          <Snowflake className="absolute inset-0 m-auto w-6 h-6 text-[#00F0FF] animate-pulse" />
-        </div>
-      </div>
-    );
+    return <CyberLoading />;
   }
 
   return (
-    <div className="min-h-screen bg-black text-zinc-200 font-sans selection:bg-[#00F0FF]/30 relative overflow-x-hidden">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-[#00F0FF]/20 relative overflow-hidden">
+      <CustomCursor />
+      <NoiseOverlay />
+      
+      {/* Scroll Progress Bar */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-1 bg-[#00F0FF] z-[100] origin-left shadow-[0_0_10px_#00F0FF]"
+        style={{ scaleX: scrollYProgress }}
+      />
+      
+      {/* Graphical Enhancements */}
+      <div className="scanline" />
+      <div className="fixed inset-0 cyber-grid opacity-20 pointer-events-none" />
+      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-zinc-950/50 to-zinc-950 pointer-events-none" />
+      
       <Snowfall />
       
       {/* Top Navigation Bar */}
-      <nav className="h-16 bg-black/90 backdrop-blur-md border-b border-[#00F0FF]/20 sticky top-0 z-[60] px-6 flex items-center justify-between">
+      <nav className="h-16 glass-panel border-b border-[#00F0FF]/20 sticky top-0 z-[60] px-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-[#00F0FF] font-black tracking-tighter text-2xl uppercase italic">
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="flex items-center gap-2 text-[#00F0FF] font-black tracking-tighter text-2xl uppercase italic cursor-pointer"
+            onClick={() => { setSelectedGame(null); setShowWishlist(false); setShowProfile(false); }}
+          >
             <Snowflake className="w-8 h-8" />
             <span>{settings.siteName}</span>
-          </div>
+          </motion.div>
           <div className="hidden md:flex items-center gap-6 ml-10">
-            <button 
-              onClick={() => { setSelectedGame(null); setShowWishlist(false); }}
-              className={`text-sm font-bold uppercase tracking-widest transition-colors ${!selectedGame && !showWishlist ? 'text-[#00F0FF] border-b-2 border-[#00F0FF] pb-1' : 'text-zinc-500 hover:text-white'}`}
+            <motion.button 
+              whileHover={{ y: -2 }}
+              onClick={() => { setSelectedGame(null); setShowWishlist(false); setShowProfile(false); }}
+              className={`text-sm font-bold uppercase tracking-widest transition-colors relative ${!selectedGame && !showWishlist && !showProfile ? 'text-[#00F0FF]' : 'text-zinc-500 hover:text-white'}`}
             >
               Главная
-            </button>
+              {!selectedGame && !showWishlist && !showProfile && <motion.div layoutId="navUnderline" className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#00F0FF] shadow-[0_0_10px_#00F0FF]" />}
+            </motion.button>
             {isAdmin && (
               <Link to="/admin" className="text-sm font-bold uppercase tracking-widest text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1">
                 <Settings className="w-4 h-4" />
@@ -657,7 +769,8 @@ export default function PublicView() {
 
         <div className="flex items-center gap-6">
           {isAdmin && (
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.1 }}
               onClick={() => setShowNotifications(true)}
               className="text-white hover:text-[#00F0FF] transition-all duration-300 relative group"
             >
@@ -665,39 +778,64 @@ export default function PublicView() {
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#00F0FF] rounded-full shadow-[0_0_8px_#00F0FF]"></span>
               )}
-            </button>
+            </motion.button>
           )}
-          <button 
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
             onClick={() => { setShowWishlist(!showWishlist); setSelectedGame(null); setShowProfile(false); }}
             className={`transition-all duration-300 group ${showWishlist ? 'text-[#00F0FF]' : 'text-white hover:text-[#00F0FF]'}`}
           >
             <Star className={`w-5 h-5 group-hover:scale-110 ${showWishlist ? 'fill-[#00F0FF]' : ''}`} />
-          </button>
+          </motion.button>
           {user && (
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.1 }}
               onClick={() => { setShowProfile(!showProfile); setSelectedGame(null); setShowWishlist(false); }}
               className={`transition-all duration-300 group ${showProfile ? 'text-[#00F0FF]' : 'text-white hover:text-[#00F0FF]'}`}
               title="Профиль и достижения"
             >
               <User className={`w-5 h-5 group-hover:scale-110 ${showProfile ? 'fill-[#00F0FF]' : ''}`} />
-            </button>
-          )}
-          {isAdmin && (
-            <Link to="/admin" className="text-white hover:text-cyan-400 transition-all duration-300 group" title="Панель управления">
-              <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
-            </Link>
+            </motion.button>
           )}
           {user ? (
-            <button onClick={handleLogout} className="text-white hover:text-red-500 transition-all duration-300 group">
+            <motion.button 
+              whileHover={{ scale: 1.1, color: '#ef4444' }}
+              onClick={handleLogout} 
+              className="text-white hover:text-red-500 transition-all duration-300 group"
+            >
               <LogOut className="w-5 h-5 group-hover:scale-110" />
-            </button>
+            </motion.button>
           ) : (
-            <button onClick={handleLogin} className="text-white hover:text-[#00F0FF] transition-all duration-300 group">
+            <motion.button 
+              whileHover={{ scale: 1.1, color: '#00F0FF' }}
+              onClick={handleLogin} 
+              className="text-white hover:text-[#00F0FF] transition-all duration-300 group"
+            >
               <LogIn className="w-5 h-5 group-hover:scale-110" />
-            </button>
+            </motion.button>
           )}
         </div>
       </nav>
+
+      {/* Recent Updates Notification Bar */}
+      {games.some(g => Date.now() - (g.createdAt || 0) < 7 * 24 * 60 * 60 * 1000) && (
+        <div className="bg-[#00F0FF]/10 border-b border-[#00F0FF]/20 py-2 overflow-hidden relative z-50">
+          <div className="animate-marquee flex items-center gap-12 whitespace-nowrap">
+            {[...Array(2)].map((_, i) => (
+              <React.Fragment key={i}>
+                {games
+                  .filter(g => Date.now() - (g.createdAt || 0) < 7 * 24 * 60 * 60 * 1000)
+                  .map(g => (
+                    <span key={`${i}-${g.id}`} className="text-[10px] font-black text-[#00F0FF] uppercase tracking-[0.2em] flex items-center gap-2">
+                      <BellRing className="w-3 h-3" />
+                      Игра <span className="text-white">{g.title}</span> обновлена! Доступна версия <span className="text-white">{g.version}</span>. Скачивайте прямо сейчас!
+                    </span>
+                  ))}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* System Notification Overlay */}
       <AnimatePresence>
@@ -1074,8 +1212,11 @@ export default function PublicView() {
               Назад к играм
             </button>
 
-            <div className="grid md:grid-cols-2 gap-12 items-start">
-              <div className="space-y-8">
+            <div className="grid md:grid-cols-2 gap-12 items-start relative">
+              {/* Background Glow for Detail View */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] bg-radial-gradient from-[#00F0FF]/5 to-transparent blur-[150px] pointer-events-none" />
+
+              <div className="space-y-8 relative z-10">
                 <div className="flex flex-wrap gap-2">
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#00F0FF]/10 text-[#00F0FF] text-[10px] font-black uppercase tracking-widest border border-[#00F0FF]/20">
                     Версия {selectedGame.version}
@@ -1159,13 +1300,16 @@ export default function PublicView() {
 
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <div className="flex flex-col gap-2">
-                    <button 
+                    <motion.button 
+                      whileHover={{ scale: 1.05, boxShadow: "0 0 40px rgba(0, 240, 255, 0.6)" }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => handleDownload(selectedGame)}
-                      className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-[#00F0FF] text-black font-black uppercase tracking-widest hover:bg-[#00F0FF]/80 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_30px_rgba(0,240,255,0.4)]"
+                      className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-[#00F0FF] text-black font-black uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(0,240,255,0.4)] rounded-lg relative overflow-hidden group"
                     >
-                      <Download className="w-5 h-5" />
-                      Скачать сейчас
-                    </button>
+                      <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                      <Download className="w-5 h-5 relative z-10" />
+                      <span className="relative z-10">Скачать сейчас</span>
+                    </motion.button>
                     <div className="flex items-center justify-between px-2">
                       <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{selectedGame.downloads} скачиваний</span>
                       <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{selectedGame.views} просмотров</span>
@@ -1224,7 +1368,8 @@ export default function PublicView() {
                 </div>
               </div>
 
-              <div className="relative aspect-square md:aspect-[4/3] bg-zinc-900 border border-[#00F0FF]/20 shadow-2xl flex items-center justify-center group overflow-hidden">
+              <div className="relative aspect-square md:aspect-[4/3] bg-zinc-900 border border-[#00F0FF]/20 shadow-2xl flex items-center justify-center group overflow-hidden rounded-2xl">
+                <div className="absolute inset-0 bg-[#00F0FF]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                 {selectedGame.previewUrl ? (
                   <img src={selectedGame.previewUrl} alt="Превью игры" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity duration-700" />
                 ) : (
@@ -1239,18 +1384,28 @@ export default function PublicView() {
 
             {/* Media Gallery */}
             {( (selectedGame.screenshots && selectedGame.screenshots.length > 0) || selectedGame.trailerUrl ) && (
-              <div className="mt-20 pt-16 border-t border-white/5">
+              <motion.div 
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="mt-20 pt-16 border-t border-white/5"
+              >
                 <h2 className="text-2xl font-black text-white mb-8 flex items-center gap-3 uppercase tracking-widest italic">
                   <Eye className="w-6 h-6 text-[#00F0FF]" />
                   Медиа
                 </h2>
                 <MediaSlider screenshots={selectedGame.screenshots || []} trailerUrl={selectedGame.trailerUrl} />
-              </div>
+              </motion.div>
             )}
 
             {/* System Requirements */}
             {selectedGame.systemRequirements && (
-              <div className="mt-20 pt-16 border-t border-white/5">
+              <motion.div 
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="mt-20 pt-16 border-t border-white/5"
+              >
                 <h2 className="text-2xl font-black text-white mb-8 flex items-center gap-3 uppercase tracking-widest italic">
                   <Cpu className="w-6 h-6 text-[#00F0FF]" />
                   Системные требования
@@ -1277,7 +1432,7 @@ export default function PublicView() {
                     <p className="text-sm text-zinc-300 font-bold">{selectedGame.systemRequirements.storage || 'Не указано'}</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             )}
 
             {selectedGame.releaseNotes && (
@@ -1553,44 +1708,172 @@ export default function PublicView() {
           </div>
         ) : (
           // Games List View
-          <div className="animate-in fade-in duration-500">
-            <div className="mb-16 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-8">
-              <div>
-                <h1 className="text-5xl md:text-7xl font-black text-white mb-4 uppercase tracking-tighter italic leading-none">
-                  {settings.siteName}
-                </h1>
-                <p className="text-zinc-500 text-xl font-bold uppercase tracking-widest max-w-2xl">{settings.siteDescription}</p>
-              </div>
+          <div className="animate-in fade-in duration-700">
+            <div className="mb-24 relative min-h-[60vh] flex items-center">
+              {/* Hero Background Decoration */}
+              <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#00F0FF]/10 blur-[120px] rounded-full pointer-events-none animate-pulse" />
+              <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-purple-500/10 blur-[120px] rounded-full pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
               
-              <div className="flex flex-wrap justify-center bg-zinc-900 border border-white/5 p-1 self-center md:self-auto gap-1">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'all' ? 'bg-[#00F0FF] text-black' : 'text-zinc-500 hover:text-white'}`}
+              {/* Floating Geometric Shapes */}
+              <motion.div 
+                animate={{ 
+                  y: [0, -30, 0],
+                  rotate: [0, 90, 180, 270, 360]
+                }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="absolute top-1/4 right-1/4 w-32 h-32 border border-[#00F0FF]/10 rounded-lg pointer-events-none opacity-20"
+              />
+              <motion.div 
+                animate={{ 
+                  y: [0, 40, 0],
+                  x: [0, 20, 0],
+                  rotate: [0, -45, 0]
+                }}
+                transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-1/4 left-1/3 w-16 h-16 border border-purple-500/10 rounded-full pointer-events-none opacity-20"
+              />
+
+              <div className="relative z-10 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-12">
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.8 }}
+                  className="relative"
                 >
-                  Все игры
-                </button>
-                <button
-                  onClick={() => setFilter('pc')}
-                  className={`flex items-center gap-2 px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'pc' ? 'bg-[#00F0FF] text-black' : 'text-zinc-500 hover:text-white'}`}
+                  {/* Floating Accent */}
+                  <motion.div 
+                    animate={{ 
+                      y: [0, -20, 0],
+                      rotate: [0, 5, 0]
+                    }}
+                    transition={{ 
+                      duration: 6,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    className="absolute -top-12 -left-12 w-24 h-24 border border-[#00F0FF]/20 rounded-full flex items-center justify-center opacity-20 pointer-events-none"
+                  >
+                    <div className="w-12 h-12 border border-[#00F0FF]/40 rounded-full" />
+                  </motion.div>
+
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="h-[2px] w-12 bg-[#00F0FF]" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#00F0FF]">Official Portal</span>
+                  </div>
+                  <h1 
+                    className="text-6xl md:text-9xl font-black text-white mb-6 uppercase tracking-tighter italic leading-[0.85] drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] text-glitch"
+                    data-text={settings.siteName}
+                  >
+                    {settings.siteName}
+                  </h1>
+                  <p className="text-zinc-400 text-xl md:text-2xl font-medium uppercase tracking-widest max-w-2xl leading-relaxed opacity-80">
+                    {settings.siteDescription}
+                  </p>
+                </motion.div>
+                
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.2 }}
+                  className="flex flex-col gap-6"
                 >
-                  <Monitor className="w-3 h-3" /> PC
-                </button>
-                <button
-                  onClick={() => setFilter('android')}
-                  className={`flex items-center gap-2 px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'android' ? 'bg-[#00F0FF] text-black' : 'text-zinc-500 hover:text-white'}`}
-                >
-                  <Smartphone className="w-3 h-3" /> Android
-                </button>
+                  <div className="flex flex-wrap justify-center md:justify-end bg-zinc-900/50 backdrop-blur-md border border-white/10 p-1.5 gap-1.5 rounded-sm">
+                    <button
+                      onClick={() => setFilter('all')}
+                      className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest transition-all relative overflow-hidden group ${filter === 'all' ? 'text-black' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                      {filter === 'all' && <motion.div layoutId="activeFilter" className="absolute inset-0 bg-[#00F0FF] shadow-[0_0_20px_rgba(0,240,255,0.5)]" />}
+                      <span className="relative z-10">Все платформы</span>
+                    </button>
+                    <button
+                      onClick={() => setFilter('pc')}
+                      className={`flex items-center gap-2 px-8 py-3 text-[10px] font-black uppercase tracking-widest transition-all relative overflow-hidden group ${filter === 'pc' ? 'text-black' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                      {filter === 'pc' && <motion.div layoutId="activeFilter" className="absolute inset-0 bg-[#00F0FF]" />}
+                      <span className="relative z-10 flex items-center gap-2"><Monitor className="w-3.5 h-3.5" /> PC</span>
+                    </button>
+                    <button
+                      onClick={() => setFilter('android')}
+                      className={`flex items-center gap-2 px-8 py-3 text-[10px] font-black uppercase tracking-widest transition-all relative overflow-hidden group ${filter === 'android' ? 'text-black' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                      {filter === 'android' && <motion.div layoutId="activeFilter" className="absolute inset-0 bg-[#00F0FF]" />}
+                      <span className="relative z-10 flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> Android</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap justify-center md:justify-end gap-3">
+                    <select
+                      value={genreFilter}
+                      onChange={e => setGenreFilter(e.target.value)}
+                      className="bg-zinc-900/50 backdrop-blur-md border border-white/10 text-zinc-300 text-[10px] font-black uppercase tracking-widest px-6 py-3 focus:outline-none focus:border-[#00F0FF] transition-all rounded-sm appearance-none cursor-pointer hover:bg-zinc-800/50"
+                    >
+                      <option value="all">Все жанры</option>
+                      {Array.from(new Set(games.map(g => g.genre).filter(Boolean))).sort().map(genre => (
+                        <option key={genre} value={genre}>{genre}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={tagFilter}
+                      onChange={e => setTagFilter(e.target.value)}
+                      className="bg-zinc-900/50 backdrop-blur-md border border-white/10 text-zinc-300 text-[10px] font-black uppercase tracking-widest px-6 py-3 focus:outline-none focus:border-[#00F0FF] transition-all rounded-sm appearance-none cursor-pointer hover:bg-zinc-800/50"
+                    >
+                      <option value="all">Все теги</option>
+                      {Array.from(new Set(games.flatMap(g => g.tags || []).filter(Boolean))).sort().map(tag => (
+                        <option key={tag} value={tag}>{tag}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={sortBy}
+                      onChange={e => setSortBy(e.target.value as any)}
+                      className="bg-zinc-900/50 backdrop-blur-md border border-white/10 text-zinc-300 text-[10px] font-black uppercase tracking-widest px-6 py-3 focus:outline-none focus:border-[#00F0FF] transition-all rounded-sm appearance-none cursor-pointer hover:bg-zinc-800/50"
+                    >
+                      <option value="newest">Сначала новые</option>
+                      <option value="oldest">Сначала старые</option>
+                      <option value="popularity">По популярности</option>
+                      <option value="downloads">По скачиваниям</option>
+                      <option value="views">По просмотрам</option>
+                    </select>
+                  </div>
+                </motion.div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {games.filter(g => filter === 'all' || g.platform === filter || g.platform === 'both').map(game => (
-                <div 
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {games
+                .filter(g => {
+                  const platformMatch = filter === 'all' || g.platform === filter || g.platform === 'both';
+                  const genreMatch = genreFilter === 'all' || g.genre === genreFilter;
+                  const tagMatch = tagFilter === 'all' || (g.tags && g.tags.includes(tagFilter));
+                  return platformMatch && genreMatch && tagMatch;
+                })
+                .sort((a, b) => {
+                  if (sortBy === 'newest') return (b.createdAt || 0) - (a.createdAt || 0);
+                  if (sortBy === 'oldest') return (a.createdAt || 0) - (b.createdAt || 0);
+                  if (sortBy === 'popularity') {
+                    const scoreA = (a.downloads || 0) * 5 + (a.views || 0);
+                    const scoreB = (b.downloads || 0) * 5 + (b.views || 0);
+                    return scoreB - scoreA;
+                  }
+                  if (sortBy === 'downloads') return (b.downloads || 0) - (a.downloads || 0);
+                  if (sortBy === 'views') return (b.views || 0) - (a.views || 0);
+                  return 0;
+                })
+                .map((game, index) => (
+                <motion.div 
                   key={game.id} 
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ scale: 1.02, y: -10 }}
                   onClick={() => handleViewGame(game)}
-                  className="bg-zinc-900 border border-white/5 cursor-pointer group hover:border-[#00F0FF]/40 transition-all hover:-translate-y-2 flex flex-col shadow-2xl"
+                  className="bento-card cursor-pointer group flex flex-col shadow-2xl relative overflow-hidden neon-border shimmer rounded-2xl"
                 >
+                  {/* Card Glow Effect */}
+                  <div className="absolute -inset-1 bg-gradient-to-r from-[#00F0FF]/0 via-[#00F0FF]/10 to-[#00F0FF]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
+                  
                   <div className="aspect-video bg-black flex items-center justify-center relative overflow-hidden">
                     {game.previewUrl ? (
                       <img src={game.previewUrl} alt="Превью" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-70 transition-all duration-700" />
@@ -1600,16 +1883,34 @@ export default function PublicView() {
                         <Gamepad2 className="w-12 h-12 text-[#00F0FF]/10 relative z-10 group-hover:scale-110 transition-transform duration-700" />
                       </>
                     )}
-                    <div className="absolute top-0 right-0 p-4 flex gap-2 z-20">
-                      {(game.platform === 'pc' || game.platform === 'both') && (
-                        <div className="bg-black/80 backdrop-blur-sm p-2 border border-white/5 text-[#00F0FF]">
-                          <Monitor className="w-3.5 h-3.5" />
-                        </div>
+                    <div className="absolute top-0 right-0 p-4 flex flex-col gap-2 z-20 items-end">
+                      {/* New Update Badge */}
+                      {Date.now() - (game.createdAt || 0) < 7 * 24 * 60 * 60 * 1000 && (
+                        <motion.div 
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="bg-red-500 text-white text-[8px] font-black px-2 py-1 uppercase tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center gap-1"
+                        >
+                          <BellRing className="w-2.5 h-2.5" />
+                          Обновлено
+                        </motion.div>
                       )}
-                      {(game.platform === 'android' || game.platform === 'both') && (
-                        <div className="bg-black/80 backdrop-blur-sm p-2 border border-white/5 text-[#00F0FF]">
-                          <Smartphone className="w-3.5 h-3.5" />
-                        </div>
+                      <div className="flex gap-2">
+                        {(game.platform === 'pc' || game.platform === 'both') && (
+                          <div className="bg-black/80 backdrop-blur-sm p-2 border border-white/5 text-[#00F0FF]">
+                            <Monitor className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                        {(game.platform === 'android' || game.platform === 'both') && (
+                          <div className="bg-black/80 backdrop-blur-sm p-2 border border-white/5 text-[#00F0FF]">
+                            <Smartphone className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                      </div>
+                      {game.genre && (
+                        <span className="bg-[#00F0FF] text-black text-[8px] font-black px-2 py-1 uppercase tracking-widest shadow-[0_0_10px_rgba(0,240,255,0.3)]">
+                          {game.genre}
+                        </span>
                       )}
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
@@ -1623,9 +1924,24 @@ export default function PublicView() {
                       <h3 className="text-2xl font-black text-white group-hover:text-[#00F0FF] transition-colors uppercase tracking-tighter italic">{game.title}</h3>
                     </div>
                     
-                    <p className="text-zinc-500 text-sm font-medium line-clamp-2 mb-6 flex-1">
+                    <p className="text-zinc-500 text-sm font-medium line-clamp-2 mb-4 flex-1">
                       {game.description}
                     </p>
+
+                    {game.tags && game.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-6">
+                        {game.tags.slice(0, 3).map(tag => (
+                          <span key={tag} className="text-[8px] font-black text-zinc-500 border border-white/5 px-1.5 py-0.5 uppercase tracking-widest">
+                            #{tag}
+                          </span>
+                        ))}
+                        {game.tags.length > 3 && (
+                          <span className="text-[8px] font-black text-zinc-600 px-1.5 py-0.5 uppercase tracking-widest">
+                            +{game.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     
                     <div className="flex items-center justify-between pt-4 border-t border-white/5">
                       <span className="text-[10px] font-black text-[#00F0FF] bg-[#00F0FF]/10 px-2 py-1 uppercase tracking-widest">
@@ -1638,13 +1954,18 @@ export default function PublicView() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
               
-              {games.filter(g => filter === 'all' || g.platform === filter || g.platform === 'both').length === 0 && (
+              {games.filter(g => {
+                const platformMatch = filter === 'all' || g.platform === filter || g.platform === 'both';
+                const genreMatch = genreFilter === 'all' || g.genre === genreFilter;
+                const tagMatch = tagFilter === 'all' || (g.tags && g.tags.includes(tagFilter));
+                return platformMatch && genreMatch && tagMatch;
+              }).length === 0 && (
                 <div className="col-span-full py-32 text-center text-zinc-700 border-2 border-dashed border-zinc-900">
                   <Snowflake className="w-16 h-16 mx-auto mb-4 opacity-10" />
-                  <p className="font-black uppercase tracking-widest text-sm">Список пуст. Игр для этой платформы не найдено.</p>
+                  <p className="font-black uppercase tracking-widest text-sm">Список пуст. Игр с такими фильтрами не найдено.</p>
                 </div>
               )}
             </div>
@@ -1709,30 +2030,6 @@ export default function PublicView() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 mt-20 py-16 text-center">
-        <div className="flex justify-center gap-8 mb-8">
-          {settings.vkUrl && (
-            <a href={settings.vkUrl} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-[#00F0FF] font-black uppercase tracking-widest text-[10px] transition-colors">
-              ВКонтакте
-            </a>
-          )}
-          {settings.telegramUrl && (
-            <a href={settings.telegramUrl} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-[#00F0FF] font-black uppercase tracking-widest text-[10px] transition-colors">
-              Telegram
-            </a>
-          )}
-          {settings.youtubeUrl && (
-            <a href={settings.youtubeUrl} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-[#00F0FF] font-black uppercase tracking-widest text-[10px] transition-colors">
-              YouTube
-            </a>
-          )}
-        </div>
-        <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest">
-          © {new Date().getFullYear()} {settings.siteName}. Все права защищены.
-        </p>
-      </footer>
-
       {/* System Event Log */}
       <div className="fixed bottom-4 left-4 z-50 w-72 pointer-events-none flex flex-col-reverse gap-2">
         <AnimatePresence>
@@ -1769,6 +2066,93 @@ export default function PublicView() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Footer */}
+      <footer className="mt-32 border-t border-[#00F0FF]/10 bg-black/60 backdrop-blur-2xl py-24 px-6 relative z-10 overflow-hidden">
+        {/* Footer Background Decoration */}
+        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#00F0FF]/50 to-transparent" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-[#00F0FF]/5 blur-[120px] rounded-full pointer-events-none" />
+        
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16 relative z-10">
+          <div className="col-span-1 md:col-span-2">
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="flex items-center gap-2 text-[#00F0FF] font-black tracking-tighter text-3xl uppercase italic mb-8 cursor-pointer"
+              onClick={() => { setSelectedGame(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            >
+              <Snowflake className="w-10 h-10" />
+              <span>{settings.siteName}</span>
+            </motion.div>
+            <p className="text-zinc-500 text-base font-medium max-w-md leading-relaxed mb-10 opacity-80">
+              {settings.siteDescription || 'Ваш надежный портал в мир инди-игр и уникальных проектов. Исследуйте, играйте и делитесь впечатлениями.'}
+            </p>
+            <div className="flex gap-4">
+              {settings.vkUrl && (
+                <motion.a 
+                  whileHover={{ y: -5, borderColor: 'rgba(0, 240, 255, 0.5)', color: '#00F0FF' }}
+                  href={settings.vkUrl} target="_blank" rel="noreferrer" 
+                  className="w-12 h-12 glass-panel flex items-center justify-center text-zinc-400 transition-all border border-white/5 rounded-lg"
+                >
+                  <Share2 className="w-5 h-5" />
+                </motion.a>
+              )}
+              {settings.telegramUrl && (
+                <motion.a 
+                  whileHover={{ y: -5, borderColor: 'rgba(0, 240, 255, 0.5)', color: '#00F0FF' }}
+                  href={settings.telegramUrl} target="_blank" rel="noreferrer" 
+                  className="w-12 h-12 glass-panel flex items-center justify-center text-zinc-400 transition-all border border-white/5 rounded-lg"
+                >
+                  <Send className="w-5 h-5" />
+                </motion.a>
+              )}
+              {settings.discordUrl && (
+                <motion.a 
+                  whileHover={{ y: -5, borderColor: 'rgba(88, 101, 242, 0.5)', color: '#5865F2' }}
+                  href={settings.discordUrl} target="_blank" rel="noreferrer" 
+                  className="w-12 h-12 glass-panel flex items-center justify-center text-zinc-400 transition-all border border-white/5 rounded-lg"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                </motion.a>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-8 flex items-center gap-2">
+              <div className="w-4 h-px bg-[#00F0FF]" />
+              Навигация
+            </h4>
+            <ul className="space-y-5">
+              <li><button onClick={() => { setSelectedGame(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-zinc-500 hover:text-[#00F0FF] text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 group"><div className="w-1 h-1 bg-zinc-800 group-hover:bg-[#00F0FF] transition-colors" /> Главная</button></li>
+              <li><button onClick={() => setShowWishlist(true)} className="text-zinc-500 hover:text-[#00F0FF] text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 group"><div className="w-1 h-1 bg-zinc-800 group-hover:bg-[#00F0FF] transition-colors" /> Избранное</button></li>
+              {isAdmin && <li><Link to="/admin" className="text-zinc-500 hover:text-[#00F0FF] text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 group"><div className="w-1 h-1 bg-zinc-800 group-hover:bg-[#00F0FF] transition-colors" /> Админ-панель</Link></li>}
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-8 flex items-center gap-2">
+              <div className="w-4 h-px bg-[#00F0FF]" />
+              Система
+            </h4>
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Сервер: Online</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Terminal className="w-3 h-3 text-zinc-600" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Версия: 2.4.0-stable</span>
+              </div>
+              <div className="pt-4 border-t border-white/5">
+                <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                  © {new Date().getFullYear()} {settings.siteName}.<br />
+                  Designed for the future.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

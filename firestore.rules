@@ -58,6 +58,8 @@ service cloud.firestore {
              data.createdAt is number &&
              data.authorUid is string && data.authorUid.size() > 0 &&
              data.platform in ['pc', 'android', 'both'] &&
+             (!('genre' in data) || (data.genre is string && data.genre.size() < 50)) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 20)) &&
              (!('releaseNotes' in data) || (data.releaseNotes is string && data.releaseNotes.size() < 5000)) &&
              (!('logoUrl' in data) || data.logoUrl == "" || isValidUrl(data.logoUrl)) &&
              (!('previewUrl' in data) || data.previewUrl == "" || isValidUrl(data.previewUrl)) &&
